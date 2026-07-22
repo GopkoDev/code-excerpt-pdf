@@ -36,6 +36,10 @@ This is **Next.js 16 + React 19**, which have breaking changes from older traini
 
 Prettier config (`.prettierrc`) is opinionated and enforced: **no semicolons**, double quotes, 2-space, `printWidth` 80, `trailingComma: es5`, plus `prettier-plugin-tailwindcss` (auto-sorts class names). A Claude Code `PostToolUse` hook in `.claude/settings.json` runs Prettier on every file you Write/Edit, so files are formatted automatically — match that style when authoring.
 
+## Keep the architecture doc current (do this before every commit)
+
+`.claude/ARCHITECTURE.md` is a living map of the repo, written **for Claude Code** — the file tree plus what each file/area exists for. **Before creating any commit**, check whether the staged changes add, remove, move, or repurpose a file; if so, update `.claude/ARCHITECTURE.md` in the _same_ commit so the doc never drifts. A `PreToolUse` hook on `git commit` surfaces this reminder automatically. If the doc and the code ever disagree, the code is right — fix the doc.
+
 ## Theming
 
 `app/layout.tsx` wraps the app in `ThemeProvider` (`components/theme-provider.tsx`), built on `next-themes` with `attribute="class"` and system default. The provider also registers a global **`d` hotkey** that toggles dark/light (ignored while typing in inputs). Fonts: Oxanium as `--font-sans`, Geist Mono as `--font-mono`.

@@ -32,6 +32,19 @@
     "deny": []
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit:*)",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":\"Before this commit: verify .claude/ARCHITECTURE.md reflects any file this commit adds, removes, moves, or repurposes. If the tree or a file purpose changed, update ARCHITECTURE.md and stage it in the SAME commit.\"}}'",
+            "statusMessage": "Checking architecture doc..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
