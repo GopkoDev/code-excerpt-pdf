@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(echo:*)",
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "Agent"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(npm install:*)",
+      "Bash(npm i:*)",
+      "Bash(npm ci:*)",
+      "Bash(brew install:*)"
+    ],
+    "deny": []
+  }
+}
