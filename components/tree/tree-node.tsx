@@ -1,11 +1,18 @@
 "use client"
 
-import { ChevronRightIcon, FileIcon, FolderIcon } from "lucide-react"
+import {
+  ChevronRightIcon,
+  FileIcon,
+  FolderIcon,
+  PackageIcon,
+} from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { nodeState, type SelectionState } from "@/lib/tree/selection"
 import type { TreeNode as Node } from "@/lib/tree/types"
+import type { Verdict } from "@/lib/vendored"
 import { cn } from "@/lib/utils"
 
 export type NodeCounts = {
@@ -23,24 +30,38 @@ export type TreeNodeProps = {
   onToggleExpand: (path: string) => void
   onToggleSelect: (node: Node, state: SelectionState) => void
   countsFor: (node: Node) => NodeCounts
+  verdictFor: (node: Node) => Verdict | null
+  onToggleVendored: (node: Node, verdict: Verdict | null) => void
   showEstimates: boolean
+  showVendored: boolean
 }
 
-export function TreeNode({
-  node,
-  depth,
-  selected,
-  expanded,
-  onToggleExpand,
-  onToggleSelect,
-  countsFor,
-  showEstimates,
-}: TreeNodeProps) {
+export function TreeNode(props: TreeNodeProps) {
+  const {
+    node,
+    depth,
+    selected,
+    expanded,
+    onToggleExpand,
+    onToggleSelect,
+    countsFor,
+    verdictFor,
+    onToggleVendored,
+    showEstimates,
+    showVendored,
+  } = props
+
+  const verdict = verdictFor(node)
+  const isVendored = node.kind === "file" && node.entry.status === "vendored"
+
+  // Hidden by default, per SPEC — but never removed from the tree, so the
+  // toggle brings it straight back with its selection intact.
+  if (isVendored && !showVendored) return null
+
   const state = nodeState(node, selected)
   const isFolder = node.kind === "folder"
   const isOpen = expanded.has(node.path)
   const counts = countsFor(node)
-
   const unavailable = node.kind === "file" && node.entry.status !== "available"
 
   return (
@@ -98,15 +119,36 @@ export function TreeNode({
           </span>
         )}
 
+        {verdict?.vendored && (
+          <Badge variant="outline" title={verdict.reason} className="shrink-0">
+            <PackageIcon />
+            vendored
+          </Badge>
+        )}
+
         <span className="ml-auto flex shrink-0 items-center gap-2">
+          {node.kind === "file" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              title={
+                verdict
+                  ? verdict.reason
+                  : "Mark this file as vendored so it stays out of listings"
+              }
+              onClick={() => onToggleVendored(node, verdict)}
+            >
+              {verdict?.vendored ? "Unmark" : "Mark vendored"}
+            </Button>
+          )}
+
           {showEstimates && counts.exact !== undefined && (
-            // Dev-only, and only worth showing next to an exact figure: the
-            // byte estimator is what the running total rests on once GitHub is
-            // involved, and anonymous mode would otherwise never exercise it.
             <span className="font-mono text-xs text-muted-foreground">
               ~{counts.estimated}
             </span>
           )}
+
           <Badge
             variant={counts.exact === undefined ? "outline" : "secondary"}
             title={
@@ -115,8 +157,6 @@ export function TreeNode({
                 : "Exact page count"
             }
           >
-            {/* A bare number must always mean an exact count. An estimate says
-                so, or it reads as fact and quietly contradicts the total. */}
             {counts.exact === undefined
               ? `~${counts.estimated}p`
               : `${counts.exact}p`}
@@ -129,14 +169,9 @@ export function TreeNode({
           {node.children.map((child) => (
             <TreeNode
               key={child.path}
+              {...props}
               node={child}
               depth={depth + 1}
-              selected={selected}
-              expanded={expanded}
-              onToggleExpand={onToggleExpand}
-              onToggleSelect={onToggleSelect}
-              countsFor={countsFor}
-              showEstimates={showEstimates}
             />
           ))}
         </ul>

@@ -31,13 +31,17 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import {
+  VendoredWarning,
+  type PendingVendored,
+} from "@/components/tree/vendored-warning"
 import { usePdfWorker } from "@/hooks/use-pdf-worker"
 import { decodeSourceFile } from "@/lib/files/decode"
 import { estimatePages, estimatePagesForFiles } from "@/lib/pdf/estimate"
 import { paginate, type MeasuredFile, type Metrics } from "@/lib/pdf/measure"
 import type { SourceFile } from "@/lib/pdf/render"
 import { createLocalSource, toLocalFiles } from "@/lib/sources/local"
-import { buildTree, flattenFiles } from "@/lib/tree/build"
+import { buildTree, commonRoot, flattenFiles } from "@/lib/tree/build"
 import {
   deselectFolder,
   selectFolder,
@@ -45,6 +49,11 @@ import {
   type SelectionState,
 } from "@/lib/tree/selection"
 import type { ContentSource, FileEntry, TreeNode } from "@/lib/tree/types"
+import {
+  createVendoredResolver,
+  type ManualOverride,
+  type Verdict,
+} from "@/lib/vendored"
 
 /** The dev-only estimate column exists to keep the byte estimator calibrated. */
 const SHOW_ESTIMATES = process.env.NODE_ENV === "development"
@@ -64,8 +73,83 @@ export default function LocalPage() {
   const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMeasuring, setIsMeasuring] = useState(false)
+  const [overrides, setOverrides] = useState<ManualOverride[]>([])
+  const [showVendored, setShowVendored] = useState(false)
+  const [repoConfig, setRepoConfig] = useState<{
+    gitattributes?: string
+    componentsJson?: string
+  }>({})
+  const [pendingVendored, setPendingVendored] =
+    useState<PendingVendored | null>(null)
+  const [repoRoot, setRepoRoot] = useState("")
 
-  const tree = useMemo(() => buildTree(entries), [entries])
+  const resolveVendored = useMemo(
+    () =>
+      createVendoredResolver({
+        gitattributes: repoConfig.gitattributes,
+        componentsJson: repoConfig.componentsJson,
+        overrides,
+      }),
+    [repoConfig, overrides]
+  )
+
+  /** Detection rules are written against repo-relative paths. */
+  const relative = useCallback(
+    (path: string) =>
+      repoRoot === "" ? path : path.slice(repoRoot.length + 1),
+    [repoRoot]
+  )
+
+  /**
+   * Vendored status is *derived*, never stored: an override has to be able to
+   * flip it back, and a folder rule has to reach files listed later. Only
+   * `unsupported` is sticky, because it records something that was actually
+   * discovered by reading the file.
+   */
+  const classified = useMemo(
+    () =>
+      entries.map((entry) => {
+        if (entry.status === "unsupported") return entry
+        const verdict = resolveVendored(relative(entry.path))
+        return {
+          ...entry,
+          status: verdict?.vendored
+            ? ("vendored" as const)
+            : ("available" as const),
+        }
+      }),
+    [entries, resolveVendored, relative]
+  )
+
+  const tree = useMemo(() => buildTree(classified), [classified])
+
+  const verdictFor = useCallback(
+    (node: TreeNode): Verdict | null =>
+      node.kind === "file" ? resolveVendored(relative(node.path)) : null,
+    [resolveVendored, relative]
+  )
+
+  const vendoredCount = useMemo(
+    () => classified.filter((entry) => entry.status === "vendored").length,
+    [classified]
+  )
+
+  const setOverride = useCallback(
+    (path: string, scope: "file" | "folder", vendored: boolean) =>
+      setOverrides((current) => [
+        ...current.filter(
+          (item) => !(item.path === path && item.scope === scope)
+        ),
+        { path, scope, vendored },
+      ]),
+    []
+  )
+
+  const handleToggleVendored = useCallback(
+    (node: TreeNode, verdict: Verdict | null) =>
+      setOverride(relative(node.path), "file", !verdict?.vendored),
+    [relative, setOverride]
+  )
 
   const receiveFiles = useCallback(
     (files: File[]) => {
@@ -82,7 +166,26 @@ export default function LocalPage() {
       void send({ type: "measure", files: [] }).then((response) => {
         if (response.type === "measured") setMetrics(response.metrics)
       })
-      void next.listFiles().then((listed) => {
+      void next.listFiles().then(async (listed) => {
+        // Repo config drives vendored detection, and a directory picker
+        // prefixes every path with the dropped folder's own name — so look
+        // for it relative to the folder every path shares, not the root.
+        const root = commonRoot(listed.map((entry) => entry.path))
+        const at = (name: string) => (root === "" ? name : `${root}/${name}`)
+        const readIfPresent = async (name: string) => {
+          if (!listed.some((entry) => entry.path === at(name))) return undefined
+          try {
+            return new TextDecoder().decode(await next.readFile(at(name)))
+          } catch {
+            return undefined
+          }
+        }
+        setRepoRoot(root)
+        setRepoConfig({
+          gitattributes: await readIfPresent(".gitattributes"),
+          componentsJson: await readIfPresent("components.json"),
+        })
+
         setEntries(listed)
         // Open the top level so a dropped folder is not a single closed row.
         setExpanded(
@@ -191,6 +294,12 @@ export default function LocalPage() {
   const handleToggleSelect = useCallback(
     (node: TreeNode, state: SelectionState) => {
       if (node.kind === "file") {
+        const verdict = verdictFor(node)
+        // Warn, never block: SPEC forbids hard-blocking a vendored file.
+        if (verdict?.vendored && !selected.has(node.path)) {
+          setPendingVendored({ path: node.path, reason: verdict.reason })
+          return
+        }
         applySelection(toggleFile(node.path, selected))
         return
       }
@@ -213,7 +322,7 @@ export default function LocalPage() {
       )
       applySelection(change.selected)
     },
-    [applySelection, selected]
+    [applySelection, selected, verdictFor]
   )
 
   const selectedFiles = useMemo(
@@ -393,6 +502,9 @@ export default function LocalPage() {
                 onExpandAll={() => setExpanded(new Set(allFolderPaths))}
                 onCollapseAll={() => setExpanded(new Set())}
                 onClearSelection={() => setSelected(new Set())}
+                showVendored={showVendored}
+                onShowVendoredChange={setShowVendored}
+                vendoredCount={vendoredCount}
               />
               <TreeView
                 nodes={tree}
@@ -401,7 +513,10 @@ export default function LocalPage() {
                 onToggleExpand={toggleExpand}
                 onToggleSelect={handleToggleSelect}
                 countsFor={countsFor}
+                verdictFor={verdictFor}
+                onToggleVendored={handleToggleVendored}
                 showEstimates={SHOW_ESTIMATES}
+                showVendored={showVendored}
               />
             </>
           )}
@@ -416,6 +531,16 @@ export default function LocalPage() {
           </div>
         </CardContent>
       </Card>
+      <VendoredWarning
+        pending={pendingVendored}
+        onCancel={() => setPendingVendored(null)}
+        onConfirm={() => {
+          if (pendingVendored) {
+            applySelection(toggleFile(pendingVendored.path, selected))
+          }
+          setPendingVendored(null)
+        }}
+      />
     </main>
   )
 }

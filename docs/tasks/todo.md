@@ -171,21 +171,26 @@ they do not depend on any file.
 
 ## Slice 3 — Vendored detection
 
-- [ ] `lib/vendored/index.ts` (precedence resolver), `gitattributes.ts`, `plugins/shadcn.ts`,
-      `structural.ts` + tests
-- [ ] Tree markers, toolbar show/hide toggle, warn-on-add dialog
-- [ ] Overrides in React state (persistence is slice 8)
+- [x] `lib/vendored/index.ts` (precedence resolver), `gitattributes.ts`, `plugins/shadcn.ts`,
+      `structural.ts`, plus `glob.ts` and `types.ts` + tests
+- [x] Tree markers, toolbar show/hide toggle, warn-on-add dialog
+- [x] Overrides in React state (persistence is slice 8)
+- [x] `commonRoot()` in `lib/tree/build.ts` — a directory picker prefixes every path with the
+      dropped folder's name, so repo config sits under it and detection must work relative to
+      the repo, not the drop
 
-Acceptance:
+Acceptance — verified in real headless Chrome:
 
-- [ ] Precedence: manual > `.gitattributes` > shadcn plugin > structural list
-- [ ] Folder rules cascade to descendants **including files added later**; file beats folder
-- [ ] Adding a vendored file **warns and proceeds** — never hard-blocks
-- [ ] Hidden by default, with a show toggle
-- [ ] Drop **this repo**: `components/ui/button.tsx` is flagged via `components.json` →
-      `aliases.ui`, and unmarking it sticks
-
----
+- [x] Precedence: manual > `.gitattributes` > shadcn plugin > structural list
+- [x] Folder rules cascade to descendants **including files added later** (resolver runs per
+      query, never precomputed); file beats folder; deeper folder beats shallower
+- [x] Adding a vendored file **warns and proceeds** — dialog offers "Add it anyway", and the
+      file lands in the selection
+- [x] Hidden by default, with a show toggle carrying a count
+- [x] Dropping this repo's shape: `components/ui/button.tsx` flagged via `components.json` →
+      `aliases.ui`; `components/theme-provider.tsx` untouched; `legacy/*` flagged by
+      `.gitattributes`; `node_modules` by the structural list. Unmarking `button.tsx` stuck and
+      survived a hide/show cycle
 
 ## Slice 3.5 — PDF preview
 
