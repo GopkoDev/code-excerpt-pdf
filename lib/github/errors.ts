@@ -67,8 +67,19 @@ export function describeResponse(response: Response): ResponseProblem | null {
           retryAt: reset ? Number(reset) : undefined,
         }
       }
-      // Budget left but still refused: a burst limit, not an exhausted quota.
-      if (retryAfter || response.status === 429 || remaining !== null) {
+      /**
+       * Budget left but still refused. Only two things say that is a *burst*
+       * limit: an explicit 429, or a `retry-after` telling us how long to hold
+       * off. Anything else is a permissions refusal wearing a 403 — most often
+       * `Resource not accessible by integration`, which is what a private
+       * repository the App was never granted returns.
+       *
+       * The rate-limit headers are NOT evidence either way: GitHub attaches
+       * them to every response, so reading their presence as throttling
+       * classified every permissions error as "wait a moment and retry" —
+       * advice that can never come true.
+       */
+      if (retryAfter || response.status === 429) {
         return {
           kind: "secondary-rate-limit",
           retryAfterSeconds: retryAfter ? Number(retryAfter) : undefined,

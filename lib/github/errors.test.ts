@@ -35,6 +35,45 @@ describe("describeResponse", () => {
     expect(describeResponse(response(403))?.kind).toBe("forbidden")
   })
 
+  /**
+   * Reported from the running app: opening a private repository the App was
+   * never granted showed "GitHub is throttling rapid requests" and a 429.
+   *
+   * GitHub answers that with 403 `Resource not accessible by integration`, and
+   * — like every other GitHub response — it carries the rate-limit headers.
+   * Treating their mere presence as evidence of throttling turns every
+   * permissions error into a spurious retry-in-a-moment, which is advice that
+   * can never work: no amount of waiting grants access to a repository.
+   *
+   * A response with budget left and no `retry-after` is not throttling.
+   */
+  it("does not mistake a permissions 403 for throttling", () => {
+    const error = describeResponse(
+      response(403, {
+        "x-ratelimit-remaining": "4987",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-reset": "1700000000",
+      })
+    )
+    expect(error?.kind).toBe("forbidden")
+  })
+
+  it("still reads a secondary limit from retry-after alone", () => {
+    // GitHub does not always zero the budget for a burst limit, so
+    // `retry-after` is the signal that actually means "slow down".
+    const error = describeResponse(
+      response(403, { "x-ratelimit-remaining": "4987", "retry-after": "12" })
+    )
+    expect(error?.kind).toBe("secondary-rate-limit")
+    expect(error?.retryAfterSeconds).toBe(12)
+  })
+
+  it("treats an explicit 429 as throttling even with budget left", () => {
+    expect(
+      describeResponse(response(429, { "x-ratelimit-remaining": "4987" }))?.kind
+    ).toBe("secondary-rate-limit")
+  })
+
   it("maps 404 to not-found — which for a private repo means no access", () => {
     expect(describeResponse(response(404))?.kind).toBe("not-found")
   })

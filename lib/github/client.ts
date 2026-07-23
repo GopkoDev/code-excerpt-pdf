@@ -13,7 +13,8 @@ const GITHUB_API = "https://api.github.com"
 
 const MESSAGES: Record<string, string> = {
   unauthorized: "Your GitHub session expired. Sign in again.",
-  forbidden: "GitHub refused the request for this repository.",
+  forbidden:
+    "GitHub refused access to this repository. If it is private, the app has not been granted access to it — add it from Settings.",
   "not-found":
     "Not found. For a private repository this usually means the app was never granted access to it.",
   "rate-limited": "GitHub's hourly API limit is used up. Try again later.",

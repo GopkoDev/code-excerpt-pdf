@@ -106,6 +106,7 @@ code-excerpt-pdf/
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
 │   ├── github/
 │   │   ├── client.ts        # THE only fetch to api.github.com + error mapping
+│   │   ├── client.test.ts   # the whole path: response -> kind -> HTTP status
 │   │   ├── errors.ts        # typed kinds; safeMessage redacts anything token-shaped
 │   │   ├── tree.ts          # Zod-validated Trees response; surfaces `truncated`
 │   │   ├── blob.ts          # base64 → raw bytes, refuses non-inlined blobs
@@ -252,6 +253,7 @@ code-excerpt-pdf/
 ## Notes that are easy to get wrong
 
 - No `tailwind.config` file — Tailwind v4 is configured in `app/globals.css`.
+- **The `x-ratelimit-*` headers are not evidence of rate limiting.** GitHub attaches them to every response, errors included, so their mere presence says nothing. Only `x-ratelimit-remaining: 0` (exhausted quota), a `retry-after` header, or an explicit 429 means throttling. Reading their presence as a burst limit — as `describeResponse` once did — reclassified every permissions 403 as "wait a moment and retry", which turned a private repository the App was never granted into a 429 the user could never resolve by waiting. Covered by `lib/github/client.test.ts`.
 - **pdfkit is never imported as a module.** It is vendored as `public/vendor/pdfkit.standalone.js` and loaded by a Web Worker at runtime, so `next.config.ts` can stay empty (Next 16 builds with Turbopack, which cannot use pdfkit's webpack recipe). The copy is gitignored and regenerated on every `npm install`; edit `scripts/copy-pdfkit.mjs`, never the copy. It is excluded from ESLint and Prettier.
 - **Never render or measure text without `TEXT_FEATURES` from `lib/pdf/constants.ts`.** JetBrains Mono's programming ligatures (`calt`) make fontkit throw `RangeError: Offset is outside the bounds of the DataView` on `//`, `=>`, `!=`, `<=`, `===`, `->` — i.e. on almost any real source file. Passing an empty feature array does **not** help; each feature must be disabled by name.
 - The font is deliberately **not subset**. Subsetting saves only ~31% (35 KB/weight) and reintroduces the `.notdef` risk the embedded font exists to eliminate — and `.notdef` corrupts the page count, not just the looks.
