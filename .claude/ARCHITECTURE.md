@@ -27,9 +27,13 @@ code-excerpt-pdf/
 │   ├── settings.local.json  # GITIGNORED, personal: enabled plugins (context7, agent-skills)
 │   └── skills/shadcn        # symlink → ../../.agents/skills/shadcn
 ├── .agents/skills/shadcn/   # vendored shadcn skill (real files; .claude/skills symlinks here)
+├── docs/
+│   └── ideas/
+│       └── code-excerpt-pdf.md  # refined idea one-pager: WHY each design decision was made
 ├── AGENTS.md                # scaffold note: "this is not the Next.js you know"
 ├── CLAUDE.md                # primary guidance for Claude Code (read first)
 ├── README.md               # product vision, trilingual (EN/UA/PL)
+├── SPEC.md                  # HOW to build it: objective, structure, style, tests, boundaries
 ├── components.json          # shadcn config: style base-nova, base color neutral, lucide icons
 ├── eslint.config.mjs        # flat config, eslint-config-next
 ├── next.config.ts           # Next config (currently empty)
@@ -39,8 +43,9 @@ code-excerpt-pdf/
 ├── skills-lock.json         # pins vendored skills (currently: shadcn)
 ├── .prettierrc / .prettierignore
 ├── .gitignore
-└── generate.js              # STANDALONE prototype (CommonJS pdfkit). Not wired into the app,
-                             #   not committed. Kept as a future reference example only.
+└── generate.js              # STANDALONE CommonJS pdfkit script. Not wired into the app — it is
+                             #   the VISUAL REFERENCE for the exported PDF (A4, Courier 9pt code,
+                             #   Helvetica-Bold 13pt titles). The app must keep matching it.
 ```
 
 ## What each area is for
@@ -51,9 +56,11 @@ code-excerpt-pdf/
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
 - **`.claude/`** — Claude Code config and docs. `settings.json` is team-shared (committed); `settings.local.json` is personal and gitignored. Skills are consumed here via the symlink into `.agents/`.
 - **`.agents/skills/`** — cross-agent skill store created by the `skills` CLI. Real skill files live here; `.claude/skills/*` are symlinks into it. Only `shadcn` remains (the agent-skills pack was moved to a plugin in `settings.local.json`).
+- **`SPEC.md` + `docs/ideas/`** — the two halves of the plan. `SPEC.md` is operational (commands, structure, data model, testing, boundaries, acceptance criteria) and governs _how_ to build. `docs/ideas/code-excerpt-pdf.md` records _why_ each architectural trade-off was chosen (zero-source-code storage, commit pinning, tree caching, vendored detection). When they disagree, `SPEC.md` wins on how, the idea doc wins on why.
 
 ## Notes that are easy to get wrong
 
 - No `tailwind.config` file — Tailwind v4 is configured in `app/globals.css`.
-- `generate.js` is **not** the app and is not committed; ignore it when reasoning about the product.
-- The product spec in `README.md` (file tree UI, page estimates, dedupe DB) is the target — the current app is a fresh scaffold and does not implement it yet.
+- `generate.js` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic.
+- `SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch; the current app is still a fresh scaffold and implements none of it.
+- Two constraints in `SPEC.md` are non-negotiable and easy to violate by accident: **no source code or generated PDFs are ever persisted** (metadata + hashes only), and auth is a **GitHub App with `Contents: Read-only`** — never a classic OAuth App, never `scope: "repo"` (that grants write access to every private repo).
