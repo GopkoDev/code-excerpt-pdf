@@ -162,6 +162,45 @@ Acceptance:
 
 ---
 
+## Slice 3.5 — PDF preview
+
+Placed **before** Checkpoint A on purpose: that checkpoint exists to judge the whole experience
+before any infrastructure lands, and "can I see what I am about to submit?" is part of the
+experience. Blocks nothing — if it slips, move it after Checkpoint A rather than delaying the
+GitHub App registration.
+
+Today the only way to see the output is to download it and open it in another app. Preview closes
+that loop, and makes the SPEC §6 geometry contract checkable by eye without leaving the page.
+
+- [ ] `components/pdf/pdf-preview.tsx` — `<iframe>` over an object URL. **Start here, not with
+      pdf.js**: the browser's built-in viewer costs zero bytes and gives scrolling, zoom and print
+      for free. Only reach for pdf.js if page thumbnails or in-page navigation are actually wanted
+- [ ] Explicit trigger (a "Preview" button), **not** live-on-toggle. The entire architecture —
+      cached line counts, arithmetic paginator — exists so that selection changes never re-render
+      the PDF. A preview that re-renders on every checkbox would throw that away
+- [ ] **Reuse one render for both preview and download.** Cache the `RenderResult` against a
+      selection signature (sorted paths + `contentHash`), invalidate when it changes, and have the
+      download button serve the cached blob when it is still valid
+- [ ] `URL.revokeObjectURL` on unmount and on every re-render, or each preview leaks the whole
+      document
+- [ ] Fallback link ("open in a new tab") — some browsers and extensions refuse to render PDFs in
+      an iframe, and a blank grey box is a worse failure than a link
+
+Acceptance:
+
+- [ ] Preview shows the same document the download produces — **byte-identical**, because it is
+      literally the same blob
+- [ ] The page count under the preview equals the running total and the exported PDF
+- [ ] Changing the selection invalidates the preview rather than showing a stale document
+- [ ] No object URL survives unmount (check `performance.memory` or just assert revoke is called)
+- [ ] Non-ASCII and ligature-heavy files render in the preview exactly as in the download
+
+> **Do not let preview become a second render path.** The rule from slice 1 stands: `actualPages`
+> must come from the run that produced the bytes the user received. Two renders means two page
+> counts that are free to disagree — the exact failure the single-run rule was written to prevent.
+
+---
+
 ## ▸ CHECKPOINT A — full UX, zero infrastructure
 
 - [ ] Review the whole experience on a real repo before any account or database exists

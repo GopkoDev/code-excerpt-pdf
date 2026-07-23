@@ -245,6 +245,8 @@ verified manually. Revisit if that flow starts breaking.
       included file.
 - [ ] A file containing non-ASCII characters renders correctly and is counted correctly — no
       `.notdef` glyphs, no zero-width lines, no unwrapped rows.
+- [ ] The user can preview the PDF inline before downloading it, and the preview is the very
+      document the download produces — not a second render.
 - [ ] The running total shown before export equals the exported PDF's real page count exactly.
 - [ ] An exported file cannot be silently included again — reselecting it warns.
 - [ ] A past export re-downloads by re-fetching pinned commit SHAs; if a repo or commit is gone

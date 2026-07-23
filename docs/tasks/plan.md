@@ -179,6 +179,32 @@ overridable per file or folder, warning rather than blocking on add.
 **Files:** `lib/vendored/index.ts` (precedence resolver), `gitattributes.ts`, `plugins/shadcn.ts`,
 `structural.ts`. Overrides live in React state this slice; persistence is slice 8.
 
+### Slice 3.5 — PDF preview
+
+**Delivers:** a "Preview" button that shows the exact document the download would produce, inline,
+without leaving the page.
+
+**Files:** `components/pdf/pdf-preview.tsx`, plus a render cache in `app/(app)/local/page.tsx`.
+
+Deliberately scheduled before Checkpoint A: that pause is where the UX gets judged while it is
+still cheap to change, and "let me look at it before I commit" is UX, not polish. It blocks
+nothing, so if it slips it moves *after* the checkpoint rather than delaying the GitHub App and
+Neon lead times.
+
+**Two decisions worth taking now, because getting them wrong is expensive later:**
+
+1. **One render feeds both preview and download.** Slice 1 established that `pageCount` must come
+   from the run that produced the downloaded bytes. A preview that renders separately reintroduces
+   exactly the drift that rule exists to prevent. Cache the `RenderResult` against a selection
+   signature and let the download button serve it.
+2. **The browser's own PDF viewer first.** An `<iframe>` over an object URL costs nothing and
+   brings scrolling, zoom and print. pdf.js is ~1 MB and only earns its place if thumbnails or
+   in-page navigation turn out to be wanted — which is a question the checkpoint can answer.
+
+**Also worth knowing:** the preview makes the SPEC §6 geometry contract checkable by eye. Today,
+confirming that the output still matches `generate.cjs` means downloading a file and opening it
+elsewhere.
+
 > ### ▸ CHECKPOINT A — full UX, zero infrastructure
 >
 > The entire product experience exists and is deployable with no accounts, no env vars, no
