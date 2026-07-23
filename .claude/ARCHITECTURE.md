@@ -17,6 +17,8 @@ code-excerpt-pdf/
 │   └── api/
 │       ├── auth/[...nextauth]/route.ts  # Auth.js handlers
 │       └── github/
+│           ├── tree/route.ts     # one recursive=1 Trees call per repo
+│           ├── blob/route.ts     # one file's content, lazily
 │           ├── refresh/route.ts  # THE ONLY place a token is refreshed
 │           └── setup/route.ts    # GitHub App Setup URL — idempotent
 ├── components/
@@ -41,6 +43,12 @@ code-excerpt-pdf/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
 │   ├── github/
+│   │   ├── client.ts        # THE only fetch to api.github.com + error mapping
+│   │   ├── errors.ts        # typed kinds; safeMessage redacts anything token-shaped
+│   │   ├── tree.ts          # Zod-validated Trees response; surfaces `truncated`
+│   │   ├── blob.ts          # base64 → raw bytes, refuses non-inlined blobs
+│   │   ├── concurrency.ts   # queue capping parallel fetches (secondary limits)
+│   │   ├── session-token.ts # getToken() — the only way a route reads the token
 │   │   ├── refresh-lock.ts  # in-flight map — stops parallel refreshes racing
 │   │   └── installation.ts  # /user/installations → has the App been installed?
 │   ├── files/
@@ -48,7 +56,8 @@ code-excerpt-pdf/
 │   ├── uniqueness/
 │   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
 │   ├── sources/
-│   │   └── local.ts         # ContentSource over dropped files; LAZY reads, like GitHub's
+│   │   ├── local.ts         # ContentSource over dropped files; LAZY reads
+│   │   └── github.ts        # ContentSource over a repo; ONE Trees call, cached
 │   ├── vendored/
 │   │   ├── types.ts         # Layer, Verdict, ManualOverride
 │   │   ├── glob.ts          # small gitignore-subset matcher (no dependency)
