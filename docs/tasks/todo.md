@@ -224,6 +224,14 @@ Acceptance — verified in real headless Chrome:
 
 ## Slice 4 — Sign in with the GitHub App **[!]**
 
+> **Code written, credentials pending.** Everything below is implemented and type-checks, but
+> nothing here can be exercised until a GitHub App exists. The manual verification in Checkpoint B
+> is still owed. Two things changed while writing it: the access token is deliberately **not** on
+> the `Session` (that would have broken "no token in any RSC payload" — `/api/auth/session` is
+> readable by the browser), and `unstable_update` updates the Session rather than the JWT, so
+> refreshed tokens feed back through the `jwt` callback's `update` trigger.
+
+
 Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a real deploy.
 
 - [ ] `auth.ts` (Auth.js v5, JWT strategy, **no adapter**), `app/api/auth/[...nextauth]/route.ts`
@@ -260,6 +268,13 @@ Acceptance:
 
 ## Slice 5 — GitHub repos end to end (still no persistence)
 
+> **Library and routes written and unit-tested against a mocked fetch; the UI page is not.**
+> `lib/github/{client,errors,tree,blob,concurrency,session-token}.ts`,
+> `app/api/github/{tree,blob}/route.ts` and `lib/sources/github.ts` are done. What remains is
+> `app/(app)/projects/[repoId]/page.tsx` and the React Query provider — both need a real repo to
+> be worth building.
+
+
 - [ ] `lib/github/{client,tree,blob,errors,concurrency}.ts`
 - [ ] `app/api/github/{tree,blob}/route.ts` — **all GitHub access lives here, never in RSC**
 - [ ] Zod schemas for the Trees response (first untrusted JSON)
@@ -282,6 +297,12 @@ Acceptance:
 ---
 
 ## Slice 6 — Uniqueness (migration 1)
+
+> **Schema, config, client and status resolution written; no migration has been run.**
+> `npx prisma migrate dev --name init` needs a live Neon database. Note the plan expected
+> `migrations.url` in `prisma.config.ts`; Prisma 7.9 actually takes `datasource.url` — verified
+> against the installed types.
+
 
 - [ ] `prisma/schema.prisma` — **only** `User`, `Repo`, `Export`, `UsedFile`
 - [ ] `prisma.config.ts` (`datasource.url` moved here); generator `prisma-client` with
