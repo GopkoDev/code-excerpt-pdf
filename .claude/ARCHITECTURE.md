@@ -13,7 +13,7 @@ code-excerpt-pdf/
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
 │   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
-│   ├── (app)/local/page.tsx # anonymous export: drop files, running total, download
+│   ├── (app)/local/page.tsx # anonymous export: drop zone + the shared SelectionPanel
 │   └── api/
 │       ├── auth/[...nextauth]/route.ts  # Auth.js handlers
 │       └── github/
@@ -25,6 +25,9 @@ code-excerpt-pdf/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
 │   ├── local/
 │   │   └── file-drop.tsx    # drop zone + file picker + webkitdirectory folder picker
+│   ├── selection/
+│   │   └── selection-panel.tsx  # THE selection UI both modes render: tree, total,
+│   │                        #   preview, download. Source-agnostic on purpose
 │   ├── tree/
 │   │   ├── vendored-warning.tsx # warn-then-proceed dialog (never blocks)
 │   │   ├── tree-view.tsx    # scrollable root list
@@ -38,7 +41,9 @@ code-excerpt-pdf/
 │   └── ui/                  # shadcn: button card empty alert badge table spinner
 │                            #   separator checkbox collapsible scroll-area
 ├── hooks/
-│   └── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
+│   ├── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
+│   └── use-file-selection.ts # ALL state between a ContentSource and a PDF —
+│                            #   shared by anonymous mode and GitHub mode
 ├── lib/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
@@ -127,7 +132,7 @@ code-excerpt-pdf/
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
 - **`components/ui/checkbox.tsx`** — the one shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when *checked OR indeterminate*, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
-- **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. It is the same render pipeline GitHub mode will use in slice 5.
+- **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. The page itself is now only the drop zone plus `SelectionPanel`; everything else lives in `useFileSelection`, which GitHub mode drives identically.
 - **Testing** — Vitest, `node` environment, no jsdom (add it only when a slice actually needs a component test). Tests are co-located as `*.test.ts` next to the module they cover. Run with `npm test` / `npm run test:watch`.
 - **`scripts/`** — build-time Node scripts, plain `.mjs`, outside the Next.js graph.
 - **`.claude/`** — Claude Code config and docs. `settings.json` is team-shared (committed); `settings.local.json` is personal and gitignored. Skills are consumed here via the symlink into `.agents/`.
@@ -152,6 +157,7 @@ code-excerpt-pdf/
 - **The two database URLs are not interchangeable.** `DATABASE_URL` is pooled and used at runtime through the Neon adapter; `DIRECT_URL` is unpooled and used by migrations, which take out advisory locks the pooler cannot hold. Pointing migrations at the pooled string looks like a hung command, not a config error.
 - **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
+- **The two modes must not have two implementations.** SPEC requires GitHub mode to behave exactly like anonymous mode, so all of the state lives in `hooks/use-file-selection.ts` and all of the UI in `components/selection/selection-panel.tsx`. A page adds only what is genuinely source-specific — the drop zone, or the truncated-tree warning. Copying either into a page is how the two page counts start to disagree.
 - **Preview and download share one render**, keyed by `selectionSignature()`. Rendering separately would produce two page counts free to disagree — the drift the single-run rule exists to prevent. A browser check asserts the download saves the identical `Blob` *object* the preview displayed.
 - `renderPdf()` returns the page count of the run that produced the bytes. Never compute `actualPages` from a second render; the recorded number would be free to drift from the PDF the user downloaded.
 - `generate.cjs` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic. Its contract narrows to **geometry** (A4, 60pt margins, 9pt code, 13pt bold titles, `lineGap` 2, alphabetical, continuous flow); the typeface is deliberately different in the app, so page counts will not match. Run it as `node generate.cjs <dir>`; output lands in the gitignored `output/`.
