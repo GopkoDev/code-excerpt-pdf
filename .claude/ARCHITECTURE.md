@@ -12,7 +12,10 @@ code-excerpt-pdf/
 │   ├── favicon.ico
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
-│   └── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
+│   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
+│   └── spike/               # SLICE 0 THROWAWAY — delete when slice 1 lands the real renderer
+│       ├── page.tsx         #   self-reporting harness; writes PASS/FAIL into #spike-verdict
+│       └── render.worker.ts #   classic Worker: importScripts pdfkit, measure, render, Blob
 ├── components/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
 │   └── ui/
@@ -83,6 +86,8 @@ code-excerpt-pdf/
 - **Never render or measure text without `TEXT_FEATURES` from `lib/pdf/constants.ts`.** JetBrains Mono's programming ligatures (`calt`) make fontkit throw `RangeError: Offset is outside the bounds of the DataView` on `//`, `=>`, `!=`, `<=`, `===`, `->` — i.e. on almost any real source file. Passing an empty feature array does **not** help; each feature must be disabled by name.
 - The font is deliberately **not subset**. Subsetting saves only ~31% (35 KB/weight) and reintroduces the `.notdef` risk the embedded font exists to eliminate — and `.notdef` corrupts the page count, not just the looks.
 - `lib/pdf/measure.ts` must not import pdfkit. The document is injected so the same code runs in the Web Worker (where `PDFDocument` is a global from the standalone build) and in Vitest under Node.
+- The worker must stay a **classic** worker (`new Worker(new URL("./x.worker.ts", import.meta.url))` with no `{ type: "module" }`). Module workers have no `importScripts`, which is the only way to load the UMD standalone bundle. Turbopack transpiles it into its own chunk plus a `turbopack-worker-*.js` bootstrap; the raw `.ts` that also appears under `.next/static/media/` is an unused side-effect of the `new URL()` asset reference — it is served as `video/mp2t` and nothing loads it.
+- `doc.bufferedPageRange().count` is **1 unless the document was created with `bufferPages: true`**. Any test using it as ground truth is silently wrong without that flag.
 - `generate.cjs` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic. Its contract narrows to **geometry** (A4, 60pt margins, 9pt code, 13pt bold titles, `lineGap` 2, alphabetical, continuous flow); the typeface is deliberately different in the app, so page counts will not match. Run it as `node generate.cjs <dir>`; output lands in the gitignored `output/`.
 - `docs/SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch; the current app is still a fresh scaffold and implements none of it.
 - Two constraints in `docs/SPEC.md` are non-negotiable and easy to violate by accident: **no source code or generated PDFs are ever persisted** (metadata + hashes only), and auth is a **GitHub App with `Contents: Read-only`** — never a classic OAuth App, never `scope: "repo"` (that grants write access to every private repo).

@@ -37,24 +37,39 @@ defined` under `"type": "module"`) and update `.claude/ARCHITECTURE.md` in the s
       that rule — `npm run lint` is now green for the first time
 - [x] Run `node generate.cjs <fixture-dir>` and keep the output as the geometry reference —
       verified working (`node generate.cjs components`); `output/` is gitignored
-- [ ] Choose + subset a Unicode monospace font (regular + bold, Cyrillic coverage)
-- [ ] Throwaway page + Web Worker loading `pdfkit.standalone.js` from `/public/vendor/`
-- [ ] Collect chunks via `doc.on("data", …)` → `new Blob(...)`; **do not add `blob-stream`** (it
-      pulls a Node stream shim Turbopack will not polyfill)
+- [x] Choose a Unicode monospace font (regular + bold, Cyrillic coverage) — **JetBrains Mono**,
+      OFL, vendored full into `public/fonts/`. Every glyph advances 600/1000 em, Cyrillic
+      included. **Deviation: NOT subset.** Measured saving was only 31% (35 KB/weight) against
+      reintroducing the `.notdef` risk the embedded font exists to eliminate — and `.notdef`
+      corrupts the page count, not just the looks
+- [x] Throwaway page + Web Worker loading `pdfkit.standalone.js` from `/public/vendor/`
+- [x] Collect chunks via `doc.on("data", …)` → `new Blob(...)`; **`blob-stream` not added**
 
 Acceptance:
 
-- [ ] Worker runs under **both** `npm run dev` and `npm run build && npm run start`, with
-      `next.config.ts` still empty
-- [ ] Embedded font renders Latin **and** Cyrillic; `heightOfString` returns non-zero width for
-      Cyrillic
-- [ ] `heightOfString(...) / lineAdvance` is an integer across ~30 real files: long lines, one
-      5,000-char minified line, CRLF, tabs, no trailing newline, Cyrillic comments
-- [ ] Arithmetic paginator equals `doc.bufferedPageRange().count` for a ~10,000-line selection
-      (if off by ±1, identify the `lineGap` asymmetry vs the orphan guard **before** building UI)
-- [ ] Geometry matches `generate.cjs` (margins, sizes, spacing, flow)
-- [ ] `npm run build` — route First Load JS does **not** grow by ~1 MB; DevTools shows the pdfkit
-      asset fetched only on first export
+- [x] Worker runs under **both** `npm run dev` and `npm run build && npm run start`, with
+      `next.config.ts` still empty — verified in real headless Chrome over CDP, both modes PASS
+- [x] Embedded font renders Latin **and** Cyrillic; non-zero width for Cyrillic
+      (`widthOfString("привіт") = 32.40pt`, identical to the same-length Latin string)
+- [x] `heightOfString(...) / lineAdvance` is an integer across the corpus: long lines, a
+      5,000-char minified line, CRLF, tabs, no trailing newline, Cyrillic, ligature pairs
+- [x] Arithmetic paginator equals `doc.bufferedPageRange().count` — **exact, no ±1**, across a
+      12-case page-boundary sweep, ~10,000 lines over 40 files, Cyrillic-heavy input, and this
+      repo's own source. The `lineGap` asymmetry is encoded in `Cursor` in `lib/pdf/measure.ts`
+- [x] Geometry matches `generate.cjs` — `lib/pdf/constants.ts` carries the reference values
+      verbatim (A4, 60pt margins, 9/13pt, lineGap 2/4, moveDown 0.8/1.5, continuous flow)
+- [x] Route First Load JS does **not** grow by ~1 MB — pdfkit is not in the build graph at all:
+      total `.next/static` JS is 655 KB while the standalone bundle alone is 2.4 MB. The worker
+      fetches `/vendor/pdfkit.standalone.js` itself via `importScripts`
+
+**Two findings the spike existed to catch** (both would have shipped as runtime crashes):
+
+1. **JetBrains Mono's `calt` ligatures crash fontkit** — `RangeError: Offset is outside the
+bounds of the DataView` on `//`, `=>`, `!=`, `<=`, `===`, `->`. Real source hits one within a
+   few lines. `TEXT_FEATURES` in `lib/pdf/constants.ts` disables them **by name**; passing an
+   empty array does not work. Never call `text`/`heightOfString`/`widthOfString` without it
+2. **`bufferedPageRange().count` returns 1** unless the doc is built with `bufferPages: true` —
+   the ground truth was silently wrong at first, and made a correct paginator look broken
 
 - [x] ~~Amend `docs/SPEC.md`~~ — **done ahead of slice 0**; see `docs/tasks/plan.md` § "SPEC
       amendments"
