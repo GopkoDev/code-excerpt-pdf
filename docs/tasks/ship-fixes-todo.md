@@ -35,8 +35,9 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
 
 ## Phase 2 — Doc & config truth-ups (independent, fast)
 
-- [ ] **Task 3** — Correct the stale header in `lib/github/errors.ts:5-6` (a
-      budget-remaining 403 is NOT a burst limit). (cr)
+- [x] **Task 3** — Corrected the stale module header in `lib/github/errors.ts` (a
+      budget-remaining 403 is NOT a burst limit; throttling needs a 429,
+      `retry-after`, or zero budget). (cr)
 - [x] **Task 4** — Fixed the self-contradicting Testing note in
       `.claude/ARCHITECTURE.md` (include pattern IS `*.test.ts` + `*.test.tsx`) and
       dropped the obsolete `button.tsx` local-edit bullet. _(Folded into Task 1's

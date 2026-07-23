@@ -3,8 +3,11 @@
  *
  * The distinctions here are the ones that change what a user should *do*, not
  * merely what happened. A 404 on a private repo means "no access", not "gone".
- * A 403 with budget remaining is a burst limit, fixed by slowing down; a 403
- * with zero remaining is an exhausted quota, fixed only by waiting.
+ * A 403 is throttling only on real evidence — an explicit 429 or a `retry-after`
+ * header (fixed by slowing down), or zero remaining budget (an exhausted quota,
+ * fixed only by waiting). A 403 that carries neither is a permissions refusal,
+ * not a rate limit: budget left is not evidence of throttling, since GitHub
+ * attaches the rate-limit headers to every response.
  */
 
 export type GitHubErrorKind =
