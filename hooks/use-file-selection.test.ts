@@ -301,6 +301,81 @@ describe("measuring a selection", () => {
 })
 
 /**
+ * The hook is the shared pipeline for both modes, so its state has to survive
+ * fast, overlapping clicks. `measureSelected` merges its result with a
+ * functional `setMeasured(current => …)`; if it instead read the `measured` it
+ * closed over, a measure that resolves *after* a later one would merge into a
+ * stale (empty) map and wipe the later file. This drives that exact race — two
+ * measures in flight, released in reverse — through the worker mock rather than
+ * a timer, so it is deterministic.
+ */
+describe("overlapping selections", () => {
+  it("merges two out-of-order measures without dropping either", async () => {
+    // Resolvers keyed by the file set they carry, so the release order is
+    // deterministic regardless of which request reached the worker first —
+    // which is the flakiness a naive index-based order would invite.
+    const resolvers = new Map<string, () => void>()
+    workerSend.mockImplementation((request: Record<string, unknown>) => {
+      if (request.type !== "measure") {
+        return Promise.resolve({
+          type: "rendered",
+          blob: new Blob(),
+          pageCount: 0,
+          files: [],
+        })
+      }
+      const files = request.files as { name: string; text: string }[]
+      const response = {
+        type: "measured",
+        metrics: METRICS,
+        files: files.map((file) => measured(file.name, countLines(file.text))),
+      }
+      // The up-front metrics fetch (no files) must resolve now, or the tree
+      // never gets its font and nothing measures.
+      if (files.length === 0) return Promise.resolve(response)
+      const key = files
+        .map((file) => file.name)
+        .sort()
+        .join(",")
+      return new Promise((resolve) =>
+        resolvers.set(key, () => resolve(response))
+      )
+    })
+
+    // Big enough that dropping `b` changes the page count — otherwise a wipe is
+    // invisible because everything fits on one page. The deferred mock above is
+    // already active, so `load` settles on the immediate empty-metrics measure.
+    const hook = await load({
+      "a.ts": source(90, "a"),
+      "b.ts": source(90, "b"),
+    })
+
+    // Two selections, neither measure allowed to settle. The second measures
+    // both files (the first is still in flight, so nothing is `measured` yet).
+    await click(hook, "a.ts")
+    await click(hook, "b.ts")
+    await waitFor(() => expect(resolvers.size).toBe(2))
+
+    // Release the both-files measure first, then the a-only one LAST: the a-only
+    // call captured an empty `measured`, so a merge that read that stale map
+    // would overwrite the map back down to just `a` and drop `b`.
+    await act(async () => {
+      resolvers.get("a.ts,b.ts")!()
+      resolvers.get("a.ts")!()
+    })
+
+    const bothFiles = paginate(
+      [measured("a.ts", 90), measured("b.ts", 90)],
+      METRICS
+    )
+    // The case is only meaningful if losing `b` would change the count.
+    expect(bothFiles).toBeGreaterThan(paginate([measured("a.ts", 90)], METRICS))
+    await waitFor(() => expect(hook.result.current.totalPages).toBe(bothFiles))
+    expect(hook.result.current.selected).toEqual(new Set(["a.ts", "b.ts"]))
+  })
+})
+
+/**
  * Reported from the running app: pressing a folder's checkbox surfaced an
  * error about `.DS_Store` and then left the folder stuck half-selected,
  * re-reporting the same error on every subsequent click.

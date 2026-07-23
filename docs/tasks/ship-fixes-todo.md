@@ -60,9 +60,11 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
       (readFile rejects mid-measure) and `renderOnce`'s worker-failure path +
       `isRendering` reset. Both mutation-verified: each fails precisely when its
       recovery path is removed. (te #1, #2)
-- [ ] **Task 7** — Test interleaved `measureSelected` calls against the stale
-      `measured` closure; assert settled state is correct regardless of response
-      order. (te #7)
+- [x] **Task 7** — Added a deterministic interleaved-`measureSelected` test: two
+      measures in flight, released by file-set identity (not arrival order) so the
+      a-only measure lands last. Mutation-verified — a stale-closure `setMeasured`
+      wipes `b` and fails it; the functional update passes. Needed sizes large
+      enough that dropping `b` changes the page count. (te #7)
 - [ ] **Task 8** — `client.test.ts`: assert `githubFetch` returns the parsed body;
       `statusForError` 401/404; end-to-end 418 → unknown → 500. (te #3, #4)
 - [x] **Task 9** — Resolved `retryAfterSeconds`: **deleted** it (user's call — no
