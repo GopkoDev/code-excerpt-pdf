@@ -31,6 +31,10 @@ code-excerpt-pdf/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
 │   ├── uniqueness/
 │   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
+│   ├── tree/
+│   │   ├── types.ts         # FileEntry, TreeNode, ContentSource — THE source-agnostic seam
+│   │   ├── build.ts         # flat paths → nested tree, with folder aggregates
+│   │   └── selection.ts     # tri-state, bulk folder select with skip counts
 │   └── pdf/
 │       ├── constants.ts     # THE visual contract — geometry, fonts, TEXT_FEATURES.
 │       │                    #   Changing geometry here is ask-first (SPEC §6)
