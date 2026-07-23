@@ -99,16 +99,27 @@ export function TreeNode({
         )}
 
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          {showEstimates && (
-            // Dev-only: the byte estimator is what the running total rests on
-            // once GitHub is involved, and anonymous mode would otherwise never
-            // exercise it. Showing both is how it stays calibrated.
+          {showEstimates && counts.exact !== undefined && (
+            // Dev-only, and only worth showing next to an exact figure: the
+            // byte estimator is what the running total rests on once GitHub is
+            // involved, and anonymous mode would otherwise never exercise it.
             <span className="font-mono text-xs text-muted-foreground">
               ~{counts.estimated}
             </span>
           )}
-          <Badge variant={counts.exact === undefined ? "outline" : "secondary"}>
-            {counts.exact ?? counts.estimated}p
+          <Badge
+            variant={counts.exact === undefined ? "outline" : "secondary"}
+            title={
+              counts.exact === undefined
+                ? "Estimated from file size — select the file to measure it exactly"
+                : "Exact page count"
+            }
+          >
+            {/* A bare number must always mean an exact count. An estimate says
+                so, or it reads as fact and quietly contradicts the total. */}
+            {counts.exact === undefined
+              ? `~${counts.estimated}p`
+              : `${counts.exact}p`}
           </Badge>
         </span>
       </div>
