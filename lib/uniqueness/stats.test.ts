@@ -78,10 +78,10 @@ describe("projectStats", () => {
    * longer in the denominator — the share must stay a share.
    */
   it("never reports more than the whole project", () => {
-    const stats = projectStats([listed("a.ts", 100)], [
-      used("a.ts", 100),
-      used("deleted.ts", 5000),
-    ])
+    const stats = projectStats(
+      [listed("a.ts", 100)],
+      [used("a.ts", 100), used("deleted.ts", 5000)]
+    )
     expect(stats.share).toBe(1)
     expect(stats.usedBytes).toBe(5100)
   })

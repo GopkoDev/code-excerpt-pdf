@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { encodeRepoId, isValidOwner, isValidRepoName, parseRepoId } from "@/lib/github/repo-id"
+import {
+  encodeRepoId,
+  isValidOwner,
+  isValidRepoName,
+  parseRepoId,
+} from "@/lib/github/repo-id"
 
 describe("repo id", () => {
   it("round-trips owner and repo", () => {

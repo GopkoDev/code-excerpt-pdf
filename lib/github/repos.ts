@@ -50,7 +50,9 @@ export function parseInstallationsResponse(payload: unknown): InstallationList {
   const parsed = Installations.parse(payload)
   return {
     totalCount: parsed.total_count,
-    installationIds: parsed.installations.map((installation) => installation.id),
+    installationIds: parsed.installations.map(
+      (installation) => installation.id
+    ),
   }
 }
 

@@ -29,8 +29,8 @@ export default async function ExportsPage() {
         <h1 className="text-2xl font-bold">Exports</h1>
         <p className="text-muted-foreground">
           Every listing you have filed, newest first. No PDF is stored — a
-          re-download rebuilds the document from the exact commits it was
-          pinned to.
+          re-download rebuilds the document from the exact commits it was pinned
+          to.
         </p>
       </div>
 

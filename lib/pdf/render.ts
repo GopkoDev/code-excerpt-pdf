@@ -61,7 +61,9 @@ export type DocumentFactory = () => PDFKit.PDFDocument
 export function selectionSignature(files: SourceFile[]): string {
   const UNIT = "\u0000"
   return files
-    .map((file) => [file.name, file.bytes.length, checksum(file.bytes)].join(UNIT))
+    .map((file) =>
+      [file.name, file.bytes.length, checksum(file.bytes)].join(UNIT)
+    )
     .sort()
     .join("\u0001")
 }

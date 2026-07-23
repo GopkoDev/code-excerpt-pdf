@@ -35,9 +35,7 @@ function readMigrations(): Migration[] {
 }
 
 const createdTables = (sql: string): string[] =>
-  [...sql.matchAll(/CREATE TABLE "([A-Za-z0-9_]+)"/g)].map(
-    (match) => match[1]
-  )
+  [...sql.matchAll(/CREATE TABLE "([A-Za-z0-9_]+)"/g)].map((match) => match[1])
 
 /** Every quoted column declaration in a CREATE TABLE body. */
 const declaredColumns = (sql: string): string[] =>
@@ -70,7 +68,9 @@ describe("prisma migrations", () => {
   const migrations = readMigrations()
 
   it("keeps migration 1 to the four models Checkpoint D reviews", () => {
-    const init = migrations.find((migration) => migration.name.endsWith("_init"))
+    const init = migrations.find((migration) =>
+      migration.name.endsWith("_init")
+    )
     expect(init).toBeDefined()
     expect(createdTables(init!.sql).sort()).toEqual([
       "Export",

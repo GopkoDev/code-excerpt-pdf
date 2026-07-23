@@ -4,10 +4,7 @@ import { githubFetch, statusForError } from "@/lib/github/client"
 import { mapWithConcurrency } from "@/lib/github/concurrency"
 import { GitHubError } from "@/lib/github/errors"
 import { fetchInstallationState } from "@/lib/github/installation"
-import {
-  parseRepositoriesResponse,
-  type RepoSummary,
-} from "@/lib/github/repos"
+import { parseRepositoriesResponse, type RepoSummary } from "@/lib/github/repos"
 import { readAccessToken } from "@/lib/github/session-token"
 
 /**

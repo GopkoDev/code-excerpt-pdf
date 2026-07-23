@@ -23,10 +23,7 @@ import {
 import type { ContentSource, FileEntry, TreeNode } from "@/lib/tree/types"
 import { sha256Hex } from "@/lib/uniqueness/hash"
 import { projectStats } from "@/lib/uniqueness/stats"
-import {
-  resolveStatuses,
-  type UsedFileRecord,
-} from "@/lib/uniqueness/status"
+import { resolveStatuses, type UsedFileRecord } from "@/lib/uniqueness/status"
 import {
   createVendoredResolver,
   type ManualOverride,
@@ -82,8 +79,9 @@ export function useFileSelection({
     gitattributes?: string
     componentsJson?: string
   }>({})
-  const [pendingWarning, setPendingWarning] =
-    useState<PendingWarning | null>(null)
+  const [pendingWarning, setPendingWarning] = useState<PendingWarning | null>(
+    null
+  )
   /**
    * The export ledger for this source. Empty in anonymous mode, which
    * persists nothing and therefore has nothing to be marked against.

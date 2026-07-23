@@ -128,7 +128,9 @@ export function ExportCard({ row }: { row: ExportRow }) {
     <Card>
       <CardHeader>
         <CardTitle className="font-mono">
-          {row.repo ? `${row.repo.owner}/${row.repo.name}` : "Unknown repository"}
+          {row.repo
+            ? `${row.repo.owner}/${row.repo.name}`
+            : "Unknown repository"}
         </CardTitle>
         <CardDescription>
           {new Date(row.createdAt).toLocaleString()} · {row.files.length} file

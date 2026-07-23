@@ -188,7 +188,7 @@ without leaving the page.
 
 Deliberately scheduled before Checkpoint A: that pause is where the UX gets judged while it is
 still cheap to change, and "let me look at it before I commit" is UX, not polish. It blocks
-nothing, so if it slips it moves *after* the checkpoint rather than delaying the GitHub App and
+nothing, so if it slips it moves _after_ the checkpoint rather than delaying the GitHub App and
 Neon lead times.
 
 **Two decisions worth taking now, because getting them wrong is expensive later:**

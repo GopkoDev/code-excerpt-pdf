@@ -67,10 +67,12 @@ describe("parseExportRequest", () => {
    * here — a ledger row is a stored instruction to fetch something.
    */
   it("refuses an owner or name that could leave the repository path", () => {
-    expect(parseExportRequest(body({ repo: { owner: "a/b", name: "x" } })).ok)
-      .toBe(false)
-    expect(parseExportRequest(body({ repo: { owner: "a", name: ".." } })).ok)
-      .toBe(false)
+    expect(
+      parseExportRequest(body({ repo: { owner: "a/b", name: "x" } })).ok
+    ).toBe(false)
+    expect(
+      parseExportRequest(body({ repo: { owner: "a", name: ".." } })).ok
+    ).toBe(false)
     expect(
       parseExportRequest(body({ repo: { owner: "-bad", name: "x" } })).ok
     ).toBe(false)
@@ -106,9 +108,7 @@ describe("parseExportRequest", () => {
     for (const path of ["/etc/passwd", "../secrets.ts", "a/../../b.ts", ""]) {
       const result = parseExportRequest(
         body({
-          files: [
-            { path, commitSha: SHA, contentHash: HASH, sizeBytes: 1 },
-          ],
+          files: [{ path, commitSha: SHA, contentHash: HASH, sizeBytes: 1 }],
         })
       )
       expect(result.ok, path).toBe(false)

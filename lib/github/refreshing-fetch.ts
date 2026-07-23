@@ -14,7 +14,10 @@
  * client should not lean on that to avoid sending the requests at all.
  */
 
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type Fetcher = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>
 
 async function isExpired(response: Response): Promise<boolean> {
   if (response.status !== 401) return false

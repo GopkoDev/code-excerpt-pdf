@@ -106,10 +106,7 @@ describe("collectPinnedFiles", () => {
 
     const result = await collectPinnedFiles(
       repo,
-      [
-        await pinned("a.ts", "alpha"),
-        await pinned("b.ts", "beta", OTHER_SHA),
-      ],
+      [await pinned("a.ts", "alpha"), await pinned("b.ts", "beta", OTHER_SHA)],
       { fetcher }
     )
 

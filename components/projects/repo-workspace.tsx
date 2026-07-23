@@ -230,7 +230,7 @@ export function RepoWorkspace({
             Refresh
           </Button>
           {isCached && (
-            <span className="text-muted-foreground text-sm">
+            <span className="text-sm text-muted-foreground">
               Showing a saved listing — refresh to re-read the repository.
             </span>
           )}

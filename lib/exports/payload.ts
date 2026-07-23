@@ -75,8 +75,7 @@ const ExportRequest = z.object({
 export type ExportRequest = z.infer<typeof ExportRequest>
 
 export type ParseResult =
-  | { ok: true; value: ExportRequest }
-  | { ok: false; error: string }
+  { ok: true; value: ExportRequest } | { ok: false; error: string }
 
 /**
  * `ok`/`error` rather than a throw: the caller is a route handler that owes

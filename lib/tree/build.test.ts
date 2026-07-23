@@ -1,11 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  buildTree,
-  commonRoot,
-  flattenFiles,
-  folderAt,
-} from "@/lib/tree/build"
+import { buildTree, commonRoot, flattenFiles, folderAt } from "@/lib/tree/build"
 import type { FileEntry } from "@/lib/tree/types"
 
 const entry = (path: string, sizeBytes = 100): FileEntry => ({

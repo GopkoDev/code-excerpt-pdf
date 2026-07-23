@@ -52,7 +52,10 @@ export type RepoRef = { owner: string; name: string }
 /** SPEC caps content fetches to avoid GitHub's secondary rate limits. */
 const BLOB_CONCURRENCY = 4
 
-type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+type Fetcher = (
+  input: RequestInfo | URL,
+  init?: RequestInit
+) => Promise<Response>
 
 async function readError(response: Response, fallback: string) {
   try {
@@ -103,10 +106,7 @@ export async function collectPinnedFiles(
     }
 
     const body = (await response.json()) as ParsedTree
-    trees.set(
-      sha,
-      new Map(body.files.map((file) => [file.path, file.blobSha]))
-    )
+    trees.set(sha, new Map(body.files.map((file) => [file.path, file.blobSha])))
   }
 
   if (trees.size === 0) {
@@ -131,7 +131,9 @@ export async function collectPinnedFiles(
       const response = await request(`/api/github/blob?${params}`)
       if (response.status === 404) return null
       if (!response.ok) {
-        throw new Error(await readError(response, `Could not read ${file.path}.`))
+        throw new Error(
+          await readError(response, `Could not read ${file.path}.`)
+        )
       }
 
       const body = (await response.json()) as { base64?: string }

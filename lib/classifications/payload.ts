@@ -32,8 +32,7 @@ const ClassificationRequest = z.object({
 export type ClassificationRequest = z.infer<typeof ClassificationRequest>
 
 export type ParseResult =
-  | { ok: true; value: ClassificationRequest }
-  | { ok: false; error: string }
+  { ok: true; value: ClassificationRequest } | { ok: false; error: string }
 
 /** `ok`/`error` rather than a throw — the caller owes the browser a 400. */
 export function parseClassificationRequest(payload: unknown): ParseResult {

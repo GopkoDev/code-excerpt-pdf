@@ -23,7 +23,9 @@ describe("parseInstallationsResponse", () => {
   })
 
   it("rejects a shape it does not recognise instead of guessing", () => {
-    expect(() => parseInstallationsResponse({ installations: "nope" })).toThrow()
+    expect(() =>
+      parseInstallationsResponse({ installations: "nope" })
+    ).toThrow()
   })
 })
 

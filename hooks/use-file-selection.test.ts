@@ -404,7 +404,9 @@ describe("a folder's exact page count", () => {
     })
 
     await click(hook, "src")
-    await waitFor(() => expect(hook.result.current.totalPages).toBeGreaterThan(0))
+    await waitFor(() =>
+      expect(hook.result.current.totalPages).toBeGreaterThan(0)
+    )
 
     const folder = findNode(hook.result.current.tree, "src")
     // The badge and the running total are two different code paths over the
@@ -542,7 +544,9 @@ describe("rendering", () => {
     // counts free to disagree.
     expect(second).toBe(first)
     expect(second.blob).toBe(first.blob)
-    expect(workerSend.mock.calls.filter(([r]) => r.type === "render")).toHaveLength(1)
+    expect(
+      workerSend.mock.calls.filter(([r]) => r.type === "render")
+    ).toHaveLength(1)
   })
 
   it("renders again once the selection actually changes", async () => {
@@ -557,7 +561,9 @@ describe("rendering", () => {
       await hook.result.current.renderOnce()
     })
 
-    expect(workerSend.mock.calls.filter(([r]) => r.type === "render")).toHaveLength(2)
+    expect(
+      workerSend.mock.calls.filter(([r]) => r.type === "render")
+    ).toHaveLength(2)
   })
 
   it("closes an open preview as soon as the selection moves on", async () => {

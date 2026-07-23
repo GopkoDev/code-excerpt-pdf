@@ -51,9 +51,7 @@ export type ClassificationsDb = UsersDb & {
     }): Promise<{ id: string } | null>
   }
   classification: {
-    findMany(args: {
-      where: { repoId: string }
-    }): Promise<ClassificationRow[]>
+    findMany(args: { where: { repoId: string } }): Promise<ClassificationRow[]>
     upsert(args: {
       where: {
         repoId_pathOrGlob: { repoId: string; pathOrGlob: string }
