@@ -62,9 +62,10 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
       order. (te #7)
 - [ ] **Task 8** — `client.test.ts`: assert `githubFetch` returns the parsed body;
       `statusForError` 401/404; end-to-end 418 → unknown → 500. (te #3, #4)
-- [ ] **Task 9** — Resolve `retryAfterSeconds` (errors.ts:85): wire through
-      `GitHubError` (+ a `Retry-After` on the 429) or delete the field and its two
-      assertions. (te #5) — see Open question.
+- [x] **Task 9** — Resolved `retryAfterSeconds`: **deleted** it (user's call — no
+      client is set to honor a `Retry-After`). Removed the field from
+      `ResponseProblem`, the computation in `describeResponse`, and the two dead
+      assertions; the classification checks stay. (te #5)
 
 ### ▸ Checkpoint C — the hook's failure modes are pinned
 
@@ -90,8 +91,9 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
 
 ---
 
-## Open question (blocks Task 9 only)
+## Open question (blocks Task 9 only) — RESOLVED
 
-- Should a GitHub 429 response carry a `Retry-After` header (wire
-  `retryAfterSeconds` through), or is the field dead weight to delete? Human call —
-  depends on whether any client should honor it.
+- ~~Should a GitHub 429 response carry a `Retry-After` header (wire
+  `retryAfterSeconds` through), or is the field dead weight to delete?~~ Deleted
+  the field — no client is set to honor a `Retry-After`, so the computed value was
+  dead weight.

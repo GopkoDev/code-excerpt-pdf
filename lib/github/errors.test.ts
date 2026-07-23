@@ -24,7 +24,6 @@ describe("describeResponse", () => {
       response(403, { "x-ratelimit-remaining": "4331", "retry-after": "60" })
     )
     expect(error?.kind).toBe("secondary-rate-limit")
-    expect(error?.retryAfterSeconds).toBe(60)
   })
 
   it("maps 401 to an expired session rather than a generic failure", () => {
@@ -65,7 +64,6 @@ describe("describeResponse", () => {
       response(403, { "x-ratelimit-remaining": "4987", "retry-after": "12" })
     )
     expect(error?.kind).toBe("secondary-rate-limit")
-    expect(error?.retryAfterSeconds).toBe(12)
   })
 
   it("treats an explicit 429 as throttling even with budget left", () => {

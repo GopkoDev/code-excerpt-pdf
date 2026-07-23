@@ -20,8 +20,6 @@ export type ResponseProblem = {
   kind: GitHubErrorKind
   /** Epoch seconds when the primary quota resets. */
   retryAt?: number
-  /** Seconds to wait, for a secondary limit. */
-  retryAfterSeconds?: number
 }
 
 /** Anything token-shaped, so it can never reach a log or an error surface. */
@@ -80,10 +78,7 @@ export function describeResponse(response: Response): ResponseProblem | null {
        * advice that can never come true.
        */
       if (retryAfter || response.status === 429) {
-        return {
-          kind: "secondary-rate-limit",
-          retryAfterSeconds: retryAfter ? Number(retryAfter) : undefined,
-        }
+        return { kind: "secondary-rate-limit" }
       }
       return { kind: "forbidden" }
     }
