@@ -13,14 +13,17 @@ code-excerpt-pdf/
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
 │   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
-│   └── spike/               # SLICE 0 THROWAWAY — delete when slice 1 lands the real renderer
-│       ├── page.tsx         #   self-reporting harness; writes PASS/FAIL into #spike-verdict
-│       └── render.worker.ts #   classic Worker: importScripts pdfkit, measure, render, Blob
+│   └── (app)/local/page.tsx # anonymous export: drop files, running total, download
 ├── components/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
-│   └── ui/
-│       └── button.tsx       # shadcn Button (base-nova preset, @base-ui/react)
-├── hooks/                   # (empty) React hooks live here
+│   ├── local/
+│   │   └── file-drop.tsx    # drag-and-drop / file-picker zone → raw bytes
+│   ├── pdf/
+│   │   ├── download-button.tsx  # asks the worker to render, saves the Blob
+│   │   └── render.worker.ts     # THE only place pdfkit runs (classic Worker)
+│   └── ui/                  # shadcn: button card empty alert badge table spinner separator
+├── hooks/
+│   └── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
 ├── lib/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
@@ -34,7 +37,8 @@ code-excerpt-pdf/
 │       ├── measure.ts       # exact line counts (pdfkit's wrapper) + arithmetic paginator
 │       ├── measure.test.ts  # proves the paginator == pdfkit's own page count
 │       ├── render.ts        # drawFiles() = the ONLY draw loop; renderPdf() → blob+count
-│       └── render.test.ts   # single-run page count, alphabetical order, raw-byte hashing
+│       ├── render.test.ts   # single-run page count, alphabetical order, raw-byte hashing
+│       └── worker-protocol.ts   # message types shared by the page and the worker
 ├── scripts/
 │   └── copy-pdfkit.mjs      # postinstall: node_modules/pdfkit/js/pdfkit.standalone.js
 │                            #   → public/vendor/ (loaded by a Web Worker at runtime)
@@ -79,6 +83,7 @@ code-excerpt-pdf/
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
+- **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. It is the same render pipeline GitHub mode will use in slice 5.
 - **Testing** — Vitest, `node` environment, no jsdom (add it only when a slice actually needs a component test). Tests are co-located as `*.test.ts` next to the module they cover. Run with `npm test` / `npm run test:watch`.
 - **`scripts/`** — build-time Node scripts, plain `.mjs`, outside the Next.js graph.
 - **`.claude/`** — Claude Code config and docs. `settings.json` is team-shared (committed); `settings.local.json` is personal and gitignored. Skills are consumed here via the symlink into `.agents/`.

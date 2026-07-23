@@ -81,25 +81,35 @@ bounds of the DataView` on `//`, `=>`, `!=`, `<=`, `===`, `->`. Real source hits
 
 ## Slice 1 — Anonymous flat export
 
-- [ ] `lib/pdf/constants.ts` — the entire visual contract in one file (changing it is ask-first
-      per SPEC §6; one file makes that diff obvious)
-- [ ] `lib/pdf/measure.ts`, `lib/pdf/render.ts` + tests
-- [ ] `lib/uniqueness/hash.ts` + test — SHA-256 via `crypto.subtle` - [ ] **Hash raw bytes, before** the `\t` → two-space transform, and comment why (hashing
-      post-transform invalidates every stored hash on any future whitespace tweak)
-- [ ] `renderPdf()` returns `{ blob, pageCount, files[] }` from a **single** run — `actualPages`
-      must never come from a second render
-- [ ] `components/local/file-drop.tsx`, `components/pdf/download-button.tsx`,
-      `app/(app)/local/page.tsx`
+- [x] `lib/pdf/constants.ts` — the entire visual contract in one file (landed in slice 0)
+- [x] `lib/pdf/measure.ts`, `lib/pdf/render.ts` + tests
+- [x] `lib/uniqueness/hash.ts` + test — SHA-256 via `crypto.subtle` - [x] **Hash raw bytes, before** the `\t` → two-space transform, with the reason in a comment.
+      Tests pin it: a tab and the two spaces it renders as must hash differently, as must CRLF
+      and LF
+- [x] `renderPdf()` returns `{ blob, pageCount, files[] }` from a **single** run, and throws if
+      the document lacks `bufferPages` rather than silently reporting one page
+- [x] `components/local/file-drop.tsx`, `components/pdf/download-button.tsx`,
+      `app/(app)/local/page.tsx`, plus `hooks/use-pdf-worker.ts` and
+      `components/pdf/render.worker.ts`
+- [x] `lib/files/decode.ts` — bytes → text, or a reason (binary / bad UTF-8); also strips a BOM
+- [x] `app/spike/` deleted, as slice 0 planned
+- [x] shadcn via CLI: `card empty alert badge table spinner separator`
 
-Acceptance:
+Acceptance — all verified end to end in real headless Chrome over CDP:
 
-- [ ] N files → one PDF, alphabetical, continuous flow, no page numbers
-- [ ] Running total equals the downloaded PDF's real page count **exactly**
-- [ ] Binary files rejected with a visible reason
-- [ ] `pageCount` deterministic across runs for a fixed fixture
-- [ ] Zero network requests fire on export (check DevTools)
+- [x] N files → one PDF, alphabetical, continuous flow, no page numbers.
+      `middle.ts, zebra.ts, альфа.ts` — UTF-16 code-unit order, matching `generate.cjs`
+- [x] Running total equals the downloaded PDF's real page count **exactly** — 10 shown,
+      10 `/Type /Page` objects in the captured blob, 10 reported after export
+- [x] Binary files rejected with a visible reason —
+      "logo.png — Looks like a binary file (contains a NUL byte), not source code."
+- [x] `pageCount` deterministic across runs for a fixed fixture
+- [x] Zero network requests fire on export — captured via CDP during the click: `[]`.
+      pdfkit and the fonts are fetched once at worker start-up, from this app's own origin,
+      and no file content ever leaves the page
 
----
+**Note for slice 2:** `drawFiles()` in `lib/pdf/render.ts` is now the only draw loop, and
+`measure.test.ts` validates the paginator against it rather than a copy — keep it that way.
 
 ## Slice 2 — Anonymous folder tree
 
