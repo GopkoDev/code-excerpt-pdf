@@ -24,6 +24,10 @@ code-excerpt-pdf/
 ├── lib/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
+│   ├── files/
+│   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
+│   ├── uniqueness/
+│   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
 │   └── pdf/
 │       ├── constants.ts     # THE visual contract — geometry, fonts, TEXT_FEATURES.
 │       │                    #   Changing geometry here is ask-first (SPEC §6)
