@@ -49,7 +49,7 @@ import type { ContentSource, FileEntry, TreeNode } from "@/lib/tree/types"
 /** The dev-only estimate column exists to keep the byte estimator calibrated. */
 const SHOW_ESTIMATES = process.env.NODE_ENV === "development"
 
-type Rejected = { name: string; reason: string }
+type Rejected = { path: string; reason: string }
 
 export default function LocalPage() {
   const { send } = usePdfWorker()
@@ -123,15 +123,33 @@ export default function LocalPage() {
               text: decoded.text,
             })
           } else {
-            failures.push({ name: path, reason: decoded.reason })
+            failures.push({ path, reason: decoded.reason })
           }
         }
 
         if (failures.length > 0) {
-          setRejected((current) => [...current, ...failures])
+          const failed = new Set(failures.map((failure) => failure.path))
+
+          // Mark them, do not merely deselect them. A file left `available`
+          // after failing gets re-added by the next bulk select, fails again,
+          // and leaves its folder permanently indeterminate.
+          setEntries((current) =>
+            current.map((entry) =>
+              failed.has(entry.path)
+                ? { ...entry, status: "unsupported" as const }
+                : entry
+            )
+          )
+          setRejected((current) => {
+            const seen = new Set(current.map((item) => item.path))
+            return [
+              ...current,
+              ...failures.filter((failure) => !seen.has(failure.path)),
+            ]
+          })
           setSelected((current) => {
             const next = new Set(current)
-            failures.forEach((f) => next.delete(f.name))
+            failed.forEach((path) => next.delete(path))
             return next
           })
         }
@@ -182,8 +200,16 @@ export default function LocalPage() {
         return
       }
       const change = selectFolder(node, selected)
+      const skipped = [
+        change.skippedUsed > 0 && `${change.skippedUsed} used`,
+        change.skippedVendored > 0 && `${change.skippedVendored} vendored`,
+        change.skippedUnsupported > 0 &&
+          `${change.skippedUnsupported} not text`,
+      ].filter(Boolean)
       setNotice(
-        `Added ${change.added}, skipped ${change.skippedUsed} used, ${change.skippedVendored} vendored.`
+        `Added ${change.added}` +
+          (skipped.length > 0 ? `, skipped ${skipped.join(", ")}` : "") +
+          "."
       )
       applySelection(change.selected)
     },
@@ -306,8 +332,8 @@ export default function LocalPage() {
           <AlertDescription>
             <ul className="flex flex-col gap-1">
               {rejected.map((file) => (
-                <li key={file.name}>
-                  <span className="font-mono">{file.name}</span> — {file.reason}
+                <li key={file.path}>
+                  <span className="font-mono">{file.path}</span> — {file.reason}
                 </li>
               ))}
             </ul>

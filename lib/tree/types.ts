@@ -7,8 +7,17 @@
  * which one it is talking to.
  */
 
-/** Why a file may not be selectable. `available` is the only usable state. */
-export type FileStatus = "available" | "used" | "used-but-changed" | "vendored"
+/**
+ * Why a file may not be selectable. `available` is the only usable state.
+ *
+ * `unsupported` is assigned at runtime, when reading a file proves it is not
+ * text — a listing only knows names and sizes, so nothing can predict it. It
+ * must exist as a status rather than merely being deselected: a file that
+ * stays `available` after failing gets re-added by the next bulk select,
+ * fails again, and leaves its folder permanently half-selected.
+ */
+export type FileStatus =
+  "available" | "used" | "used-but-changed" | "vendored" | "unsupported"
 
 export type FileEntry = {
   /** Path relative to the source root, e.g. `src/lib/utils.ts`. Unique. */

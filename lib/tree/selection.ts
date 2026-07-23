@@ -18,6 +18,8 @@ export type SelectionChange = {
   added: number
   skippedUsed: number
   skippedVendored: number
+  /** Files that turned out not to be text when they were read. */
+  skippedUnsupported: number
 }
 
 function descendants(node: TreeNode): FileNode[] {
@@ -52,6 +54,7 @@ export function selectFolder(
   let added = 0
   let skippedUsed = 0
   let skippedVendored = 0
+  let skippedUnsupported = 0
 
   for (const file of descendants(node)) {
     const { status, path } = { status: file.entry.status, path: file.path }
@@ -64,13 +67,25 @@ export function selectFolder(
       skippedUsed += 1
       continue
     }
+    // Re-adding one of these would fail to decode again and leave the folder
+    // stuck indeterminate, re-reporting the same error on every click.
+    if (status === "unsupported") {
+      skippedUnsupported += 1
+      continue
+    }
     if (!next.has(path)) {
       next.add(path)
       added += 1
     }
   }
 
-  return { selected: next, added, skippedUsed, skippedVendored }
+  return {
+    selected: next,
+    added,
+    skippedUsed,
+    skippedVendored,
+    skippedUnsupported,
+  }
 }
 
 /** Clears every descendant, including ones bulk select would have skipped. */

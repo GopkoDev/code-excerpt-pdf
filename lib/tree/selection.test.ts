@@ -104,6 +104,47 @@ describe("selectFolder", () => {
     selectFolder(src(), before)
     expect(before.size).toBe(0)
   })
+
+  /**
+   * The loop this prevents: a binary file listed as available gets bulk
+   * selected, fails to decode, is deselected — and, still being available,
+   * is picked up again by the very next bulk select. Its folder can never
+   * reach "all", so it sits indeterminate and every click re-reports the
+   * same error.
+   */
+  describe("files that turned out not to be text", () => {
+    const withBinary = buildTree([
+      entry("src/a.ts"),
+      entry("src/.DS_Store", "unsupported"),
+    ])
+    const folder = () => folderAt(withBinary, "src")!
+
+    it("skips them and counts them separately", () => {
+      const result = selectFolder(folder(), new Set())
+      expect([...result.selected]).toEqual(["src/a.ts"])
+      expect(result.added).toBe(1)
+      expect(result.skippedUnsupported).toBe(1)
+      expect(result.skippedUsed).toBe(0)
+      expect(result.skippedVendored).toBe(0)
+    })
+
+    it("lets the folder reach 'all' — otherwise the checkbox is stuck", () => {
+      const result = selectFolder(folder(), new Set())
+      expect(nodeState(folder(), result.selected)).toBe("all")
+    })
+
+    it("adds nothing on a second click, so the error cannot repeat", () => {
+      const first = selectFolder(folder(), new Set())
+      const second = selectFolder(folder(), first.selected)
+      expect(second.added).toBe(0)
+      expect(second.selected).toEqual(first.selected)
+    })
+
+    it("does not count toward a folder's available total", () => {
+      expect(folder().availableCount).toBe(1)
+      expect(folder().fileCount).toBe(2)
+    })
+  })
 })
 
 describe("deselectFolder", () => {
