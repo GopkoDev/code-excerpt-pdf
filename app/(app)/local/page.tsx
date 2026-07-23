@@ -218,8 +218,29 @@ export default function LocalPage() {
           exact: exact ? paginate([exact], metrics) : undefined,
         }
       }
-      const sizes = flattenFiles(node.children).map((f) => f.entry.sizeBytes)
-      return { estimated: estimatePagesForSizes(sizes, metrics) }
+      // A folder's total is its files paginated as ONE flow, never the sum of
+      // their individual counts: each file alone rounds up to a whole page,
+      // but in the export the next file starts on the page the last one ended.
+      // Summing would over-state the folder by a page per file.
+      const files = flattenFiles(node.children)
+      const counts = files.map((file) => measured.get(file.path))
+      const allMeasured =
+        files.length > 0 && counts.every((count) => count !== undefined)
+
+      return {
+        estimated: estimatePagesForSizes(
+          files.map((file) => file.entry.sizeBytes),
+          metrics
+        ),
+        exact: allMeasured
+          ? paginate(
+              (counts as MeasuredFile[])
+                .slice()
+                .sort((a, b) => (a.name < b.name ? -1 : 1)),
+              metrics
+            )
+          : undefined,
+      }
     },
     [measured, metrics]
   )

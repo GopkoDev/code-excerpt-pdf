@@ -130,6 +130,62 @@ describe("metricsOf", () => {
 })
 
 /**
+ * Pages do not add up, and the UI must never imply that they do.
+ *
+ * Each file measured alone rounds up to a whole page, but the export is one
+ * continuous flow, so the next file starts on the same page the previous one
+ * ended. Summing per-file counts therefore always over-states the total. Any
+ * aggregate shown for a folder has to be paginated as a flow, not summed.
+ */
+describe("pagination is a flow, not a sum", () => {
+  const doc = newDoc()
+  const metrics = metricsOf(doc)
+  const file = (name: string, lines: number) =>
+    measureFile(doc, name, "x\n".repeat(lines))
+
+  it("never exceeds the sum of the parts", () => {
+    const files = [
+      file("a.ts", 30),
+      file("b.ts", 170),
+      file("c.ts", 120),
+      file("d.ts", 70),
+    ]
+    const sumOfParts = files.reduce((n, f) => n + paginate([f], metrics), 0)
+    expect(paginate(files, metrics)).toBeLessThanOrEqual(sumOfParts)
+  })
+
+  it("reclaims the slack left at the end of each file", () => {
+    // Each of these is one line, so alone each occupies a page; together they
+    // share one.
+    const files = Array.from({ length: 5 }, (_, i) => file(`f${i}.ts`, 1))
+    expect(files.reduce((n, f) => n + paginate([f], metrics), 0)).toBe(5)
+    expect(paginate(files, metrics)).toBe(1)
+  })
+
+  it("still matches pdfkit for a selection whose parts would sum higher", () => {
+    const LINES = 12
+    const files = [
+      file("a.ts", LINES),
+      file("b.ts", LINES),
+      file("c.ts", LINES),
+    ]
+    const sumOfParts = files.reduce((n, f) => n + paginate([f], metrics), 0)
+    const predicted = paginate(files, metrics)
+    expect(predicted).toBeLessThan(sumOfParts)
+
+    const rendered = newDoc(true)
+    rendered.pipe(new Writable({ write: (_c, _e, cb) => cb() }))
+    drawFiles(
+      rendered,
+      files.map((f) => ({ name: f.name, text: "x\n".repeat(LINES) }))
+    )
+    const actual = rendered.bufferedPageRange().count
+    rendered.end()
+    expect(predicted).toBe(actual)
+  })
+})
+
+/**
  * The test that justifies the whole spike: the arithmetic paginator must agree
  * with pdfkit's own page count, so the running total shown before export equals
  * the exported PDF exactly (SPEC acceptance criteria).
