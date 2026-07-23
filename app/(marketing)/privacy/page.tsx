@@ -175,10 +175,15 @@ export default function PrivacyPage() {
 
       <Section title="Cookies">
         <p>
-          One cookie: the encrypted Auth.js session, which is what keeps you
-          signed in and carries the GitHub token server-side. There are no
-          analytics, no tracking pixels and no third-party scripts in this
-          application.
+          Only the ones signing in requires. The important one is the encrypted
+          session cookie, which keeps you signed in and is where the GitHub
+          token lives, readable by the server and never by the page. Alongside
+          it the sign-in flow sets the usual short-lived helpers — a CSRF token,
+          the URL to return to, and a one-time code verifier.
+        </p>
+        <p>
+          There are no analytics cookies, no tracking pixels and no third-party
+          scripts in this application. Nothing here counts visitors.
         </p>
         <p>
           The operator&rsquo;s hosting provider may keep its own request logs,
