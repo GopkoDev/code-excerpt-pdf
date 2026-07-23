@@ -11,7 +11,6 @@ import {
   CODE_SIZE,
   CONTENT_WIDTH,
   MARGIN,
-  TEXT_FEATURES,
   TITLE_FONT,
 } from "@/lib/pdf/constants"
 import {
@@ -21,6 +20,7 @@ import {
   normalizeCode,
   paginate,
 } from "@/lib/pdf/measure"
+import { drawFiles } from "@/lib/pdf/render"
 
 const FONT_DIR = join(process.cwd(), "public/fonts")
 
@@ -139,20 +139,12 @@ describe("paginate", () => {
     const doc = newDoc(true)
     // Discard the bytes — we only want the page count.
     doc.pipe(new Writable({ write: (_chunk, _enc, cb) => cb() }))
-    files.forEach((file, index) => {
-      if (index > 0) doc.moveDown(1.5)
-      doc.font(TITLE_FONT).fontSize(13).text(file.name, {
-        lineGap: 4,
-        width: CONTENT_WIDTH,
-        features: TEXT_FEATURES,
-      })
-      doc.moveDown(0.8)
-      doc.font(CODE_FONT).fontSize(CODE_SIZE).text(normalizeCode(file.code), {
-        lineGap: CODE_LINE_GAP,
-        width: CONTENT_WIDTH,
-        features: TEXT_FEATURES,
-      })
-    })
+    // Deliberately the real renderer rather than a second copy of the flow:
+    // if drawFiles and the paginator ever disagree, this is what must fail.
+    drawFiles(
+      doc,
+      files.map((file) => ({ name: file.name, text: file.code }))
+    )
     const actual = doc.bufferedPageRange().count
     doc.end()
     return actual
