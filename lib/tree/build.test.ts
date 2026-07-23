@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { buildTree, flattenFiles, folderAt } from "@/lib/tree/build"
+import {
+  buildTree,
+  commonRoot,
+  flattenFiles,
+  folderAt,
+} from "@/lib/tree/build"
 import type { FileEntry } from "@/lib/tree/types"
 
 const entry = (path: string, sizeBytes = 100): FileEntry => ({
@@ -110,5 +115,31 @@ describe("folderAt", () => {
 
   it("returns undefined for an unknown path", () => {
     expect(folderAt(buildTree([entry("a.ts")]), "nope")).toBeUndefined()
+  })
+})
+
+describe("commonRoot", () => {
+  it("finds the shared top folder of a dropped directory", () => {
+    expect(commonRoot(["proj/src/a.ts", "proj/docs/b.md"])).toBe("proj")
+  })
+
+  it("goes as deep as the paths agree", () => {
+    expect(commonRoot(["proj/src/a.ts", "proj/src/b.ts"])).toBe("proj/src")
+  })
+
+  it("is empty when files were picked from different roots", () => {
+    expect(commonRoot(["a/x.ts", "b/y.ts"])).toBe("")
+  })
+
+  it("is empty for loose files with no folder at all", () => {
+    expect(commonRoot(["a.ts", "b.ts"])).toBe("")
+  })
+
+  it("never swallows the whole path of a single file", () => {
+    expect(commonRoot(["proj/src/a.ts"])).toBe("proj/src")
+  })
+
+  it("is empty for no files", () => {
+    expect(commonRoot([])).toBe("")
   })
 })

@@ -39,6 +39,13 @@ code-excerpt-pdf/
 │   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
 │   ├── sources/
 │   │   └── local.ts         # ContentSource over dropped files; LAZY reads, like GitHub's
+│   ├── vendored/
+│   │   ├── types.ts         # Layer, Verdict, ManualOverride
+│   │   ├── glob.ts          # small gitignore-subset matcher (no dependency)
+│   │   ├── structural.ts    # node_modules, dist, lockfiles — lowest precedence
+│   │   ├── gitattributes.ts # linguist-vendored / -generated, and negations
+│   │   ├── plugins/shadcn.ts# components.json → aliases.ui
+│   │   └── index.ts         # THE precedence resolver, evaluated per query
 │   ├── tree/
 │   │   ├── types.ts         # FileEntry, TreeNode, ContentSource — THE source-agnostic seam
 │   │   ├── build.ts         # flat paths → nested tree, with folder aggregates

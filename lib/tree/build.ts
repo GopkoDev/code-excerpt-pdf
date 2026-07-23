@@ -109,6 +109,37 @@ export function flattenFiles(nodes: TreeNode[]): FileNode[] {
   )
 }
 
+/**
+ * The deepest folder every path shares.
+ *
+ * A directory picker prefixes every path with the dropped folder's own name,
+ * so repo-level config — `components.json`, `.gitattributes` — sits under it
+ * rather than at the root. Vendored detection has to evaluate paths relative
+ * to the repo, not to whatever the folder happened to be called.
+ *
+ * The last segment is never consumed: it is the filename, not a folder.
+ */
+export function commonRoot(paths: string[]): string {
+  if (paths.length === 0) return ""
+
+  const folders = paths.map((path) =>
+    path
+      .split("/")
+      .filter((s) => s !== "" && s !== ".")
+      .slice(0, -1)
+  )
+
+  const shortest = Math.min(...folders.map((f) => f.length))
+  const shared: string[] = []
+  for (let depth = 0; depth < shortest; depth++) {
+    const segment = folders[0][depth]
+    if (folders.every((f) => f[depth] === segment)) shared.push(segment)
+    else break
+  }
+
+  return shared.join("/")
+}
+
 export function folderAt(
   nodes: TreeNode[],
   path: string
