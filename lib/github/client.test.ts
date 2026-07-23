@@ -54,6 +54,20 @@ describe("a private repository the app was never granted", () => {
     expect(error.safeMessage).toMatch(/private/i)
     expect(error.safeMessage).not.toMatch(/throttl|wait|retry/i)
   })
+
+  /**
+   * A 403 has two causes that cannot be told apart without spending another
+   * request: a missing `Contents` permission, or a repository that was never
+   * added to the installation. Naming only the second sends the user to
+   * re-tick a repository that is already ticked — which is what happens when
+   * the App was registered without the permission at all.
+   */
+  it("names both causes, not just the repository selection", async () => {
+    const error = await failureOf(reply(403, RATE_HEADERS))
+
+    expect(error.safeMessage).toMatch(/contents/i)
+    expect(error.safeMessage).toMatch(/granted|access/i)
+  })
 })
 
 describe("real rate limiting still reads as rate limiting", () => {

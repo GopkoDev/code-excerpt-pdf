@@ -13,8 +13,19 @@ const GITHUB_API = "https://api.github.com"
 
 const MESSAGES: Record<string, string> = {
   unauthorized: "Your GitHub session expired. Sign in again.",
+  /**
+   * Two different causes produce this, and they are indistinguishable here
+   * without spending another request: the App may lack the `Contents` read
+   * permission, or it may simply not have been granted this repository. Both
+   * are named, because advising only the second sends a user to re-tick a
+   * repository that is already ticked.
+   *
+   * Public repositories are readable by any authenticated token, so this is
+   * almost always a private repository — which is why it is worth saying that
+   * a public one working proves nothing about the permission.
+   */
   forbidden:
-    "GitHub refused access to this repository. If it is private, the app has not been granted access to it — add it from Settings.",
+    "GitHub refused access to this repository. A private one needs the app to hold the Contents (read-only) permission and to have been granted this repository — check both in Settings.",
   "not-found":
     "Not found. For a private repository this usually means the app was never granted access to it.",
   "rate-limited": "GitHub's hourly API limit is used up. Try again later.",
