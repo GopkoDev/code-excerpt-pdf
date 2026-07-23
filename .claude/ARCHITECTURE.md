@@ -53,8 +53,12 @@ code-excerpt-pdf/
 │   │   └── installation.ts  # /user/installations → has the App been installed?
 │   ├── files/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
+│   ├── db/
+│   │   ├── client.ts        # PrismaClient + PrismaNeon adapter, globalThis singleton
+│   │   └── generated/       # GITIGNORED, produced by `prisma generate` (postinstall)
 │   ├── uniqueness/
-│   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
+│   │   ├── hash.ts          # sha256Hex over RAW bytes — never post-normalization
+│   │   └── status.ts        # used vs used-but-changed resolution
 │   ├── sources/
 │   │   ├── local.ts         # ContentSource over dropped files; LAZY reads
 │   │   └── github.ts        # ContentSource over a repo; ONE Trees call, cached
@@ -145,6 +149,8 @@ code-excerpt-pdf/
 - **Vendored status is derived on every render, never stored on the entry.** An override has to be able to flip it back, and a folder rule has to reach files listed later. Only `unsupported` is sticky, because it records something discovered by actually reading the file.
 - **The access token must never reach the `Session` object.** `/api/auth/session` is readable by the browser, so anything on the session is public to the page. Route handlers read the raw JWT with `getToken()` instead. SPEC's "no token in any log or RSC payload" depends on this.
 - **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
+- **The two database URLs are not interchangeable.** `DATABASE_URL` is pooled and used at runtime through the Neon adapter; `DIRECT_URL` is unpooled and used by migrations, which take out advisory locks the pooler cannot hold. Pointing migrations at the pooled string looks like a hung command, not a config error.
+- **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
 - **Preview and download share one render**, keyed by `selectionSignature()`. Rendering separately would produce two page counts free to disagree — the drift the single-run rule exists to prevent. A browser check asserts the download saves the identical `Blob` *object* the preview displayed.
 - `renderPdf()` returns the page count of the run that produced the bytes. Never compute `actualPages` from a second render; the recorded number would be free to drift from the PDF the user downloaded.
