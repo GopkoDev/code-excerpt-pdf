@@ -419,8 +419,33 @@ Acceptance:
       - [ ] **[ext]** NDA review of migration 2 (`pg_dump`) — needs a database
       - [ ] **[ext]** Exercise it in a browser against a real database: un-mark a file, reload,
             confirm it is still authored. **Never run — no database is reachable**
-- [ ] **9 — Neon `TreeCache` tier (migration 3).** Head-SHA invalidation, manual Refresh, TTL
-      backstop. Pure optimization — no acceptance criterion depends on it. NDA review
+- [x] **9 — Neon `TreeCache` tier (migration 3).** `app/api/github/tree/route.ts` answers from
+      `TreeCache` when it can and calls GitHub when it cannot, so a cold start paints from the
+      database instead of waiting on the Trees API. `lib/db/tree-cache.ts` is the port (same
+      in-memory-fake pattern), `?refresh=1` bypasses it, and `createGitHubSource().refresh()`
+      drives that from a Refresh button on the repository page. **The source seam was not
+      widened**: `refresh()`/`isCached()` sit beside `isTruncated()`/`headSha()` as GitHub-only
+      extras, because anonymous mode has nothing to refresh and `ContentSource` is what keeps
+      the two modes from drifting.
+      - [x] Migration 3 is its own folder, `20260723120200_add_tree_cache/`, containing
+            `TreeCache` and nothing else — enforced by `prisma/migrations.test.ts`
+      - [x] `tree` carries path, size and blob SHA only. The Zod schema is applied on the way
+            **in** as well as out, so a `ParsedTree` that grew a content field upstream could
+            not reach the column; asserted by key set in `tree-cache.test.ts`
+      - [x] Invalidation keyed on `{repoId}@{headSha}` — a moved head replaces the row rather
+            than accumulating one per revision
+      - [x] TTL backstop (15 min), because a hit is served **without** asking GitHub for the
+            current head SHA — which is the entire saving, and the only thing that could
+            otherwise bound staleness
+      - [x] Every failure path is soft: a missing, slow or unreadable row costs one Trees call
+      - [x] A request pinned to a commit SHA (`regenerate.ts`) is neither served from nor
+            written to the cache
+      - [ ] **[ext]** NDA review of migration 3 (`pg_dump`) — needs a database
+      - [ ] **[ext]** Verify the cold-start hit in a browser against a real database: open a
+            repo, restart the server, confirm the second open issues **zero** Trees calls and
+            that Refresh issues exactly one. **Never run — no database is reachable**
+      - [ ] Note the new fact for Checkpoint E: caching a listing creates the `Repo` row, so
+            the database now records which repositories were *opened*, not only exported from
 - [ ] **10 — Settings + GDPR.** Repo-access link out to GitHub, full data export, account deletion.
       **Must be last** — it enumerates the final schema
 - [ ] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on

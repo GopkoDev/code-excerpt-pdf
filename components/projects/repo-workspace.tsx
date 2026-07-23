@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
-import { ChevronLeftIcon, ScissorsIcon } from "lucide-react"
+import { ChevronLeftIcon, RefreshCwIcon, ScissorsIcon } from "lucide-react"
 
 import { RepoStats } from "@/components/projects/repo-stats"
 import { SelectionPanel } from "@/components/selection/selection-panel"
@@ -32,6 +32,7 @@ export function RepoWorkspace({
   repo: string
 }) {
   const [isTruncated, setIsTruncated] = useState(false)
+  const [isCached, setIsCached] = useState(false)
   const [ledgerError, setLedgerError] = useState<string | null>(null)
   const [overridesError, setOverridesError] = useState<string | null>(null)
 
@@ -69,7 +70,7 @@ export function RepoWorkspace({
   const { loadSource, setUsedFiles, setOverrides, describeSelection } =
     selection
 
-  useEffect(() => {
+  const openSource = useCallback(() => {
     // Cached in module scope, so coming back to this repo in the same session
     // re-uses the one Trees call rather than issuing another.
     const source = getGitHubSource({ owner, repo }, { fetcher: githubApiFetch })
@@ -78,9 +79,31 @@ export function RepoWorkspace({
     // Costs nothing: the source hands back the tree it already resolved.
     void source
       .listFiles()
-      .then(() => setIsTruncated(source.isTruncated()))
-      .catch(() => setIsTruncated(false))
+      .then(() => {
+        setIsTruncated(source.isTruncated())
+        setIsCached(source.isCached())
+      })
+      .catch(() => {
+        setIsTruncated(false)
+        setIsCached(false)
+      })
   }, [owner, repo, loadSource])
+
+  useEffect(openSource, [openSource])
+
+  /**
+   * The manual escape hatch from both cache tiers.
+   *
+   * The database tier is served without asking GitHub what the head SHA is
+   * now — that is the entire saving — so a listing can be up to the TTL behind
+   * a push. This is how a user who has just committed insists on the truth.
+   * It costs exactly one Trees call, which is why it is a button rather than
+   * something the page does on its own.
+   */
+  const handleRefresh = useCallback(() => {
+    getGitHubSource({ owner, repo }, { fetcher: githubApiFetch }).refresh()
+    openSource()
+  }, [owner, repo, openSource])
 
   /**
    * Our own database, not GitHub — a plain `fetch`, and nothing counted
@@ -193,9 +216,25 @@ export function RepoWorkspace({
           <ChevronLeftIcon data-icon="inline-start" />
           All repositories
         </Button>
-        <h1 className="font-mono text-2xl font-bold">
-          {owner}/{repo}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="font-mono text-2xl font-bold">
+            {owner}/{repo}
+          </h1>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={selection.isLoading}
+          >
+            <RefreshCwIcon data-icon="inline-start" />
+            Refresh
+          </Button>
+          {isCached && (
+            <span className="text-muted-foreground text-sm">
+              Showing a saved listing — refresh to re-read the repository.
+            </span>
+          )}
+        </div>
         <p className="text-muted-foreground">
           Files are read one at a time, only once you select them. Only paths,
           revisions and hashes are ever stored — never your code.

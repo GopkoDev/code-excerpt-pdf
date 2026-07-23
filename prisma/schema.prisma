@@ -54,6 +54,7 @@ model Repo {
   usedFiles       UsedFile[]
   exports         Export[]
   classifications Classification[]
+  treeCache       TreeCache?
 
   // A user may only ever hold one row per repository. `owner`/`name` is the
   // identity, because it is the only one the app holds without spending a
@@ -133,6 +134,40 @@ model Classification {
   /// stacking a second, contradictory row that the resolver would have to
   /// break a tie between.
   @@unique([repoId, pathOrGlob])
+}
+
+/// The repository *listing*, cached across cold starts — migration 3.
+///
+/// A NEW NDA SURFACE, and the widest one in the schema: `tree` is the only
+/// Json column in the app, so it is the one place where "no source code is
+/// ever stored" could be broken by accident rather than by design.
+///
+/// **`tree` holds ONLY path, sizeBytes, blobSha and type — never file
+/// content.** A blob SHA is a pointer, not the blob; fetching what it points
+/// at still costs a GitHub call with the user's own token. The Zod schema in
+/// `lib/db/tree-cache.ts` is what enforces this: it names those fields and
+/// strips everything else on the way in *and* on the way out, so a payload
+/// that grew a `content` field upstream could not be written here.
+///
+/// This whole model is a pure optimisation. No acceptance criterion depends
+/// on it, and deleting every row costs one extra Trees call per repository.
+model TreeCache {
+  id        String   @id @default(cuid())
+  /// One row per repository, replaced rather than accumulated: the cache is a
+  /// current answer, not a history, and an unbounded table of every revision
+  /// ever listed would be a growing NDA surface for no benefit.
+  repoId    String   @unique
+  /// The revision the listing came from. `{repoId}@{headSha}` is the cache
+  /// key SPEC §5 names — a different head means the row is replaced.
+  headSha   String
+  /// Path, size, blob SHA and type. NEVER content. See the note above.
+  tree      Json
+  /// The TTL backstop's clock. A hit is served WITHOUT asking GitHub for the
+  /// current head SHA — that is the entire saving — so this bounds how stale
+  /// the answer can be when the head moved and nothing told us.
+  fetchedAt DateTime @default(now())
+
+  repo Repo @relation(fields: [repoId], references: [id], onDelete: Cascade)
 }
 
 // ---------------------------------------------------------------------------

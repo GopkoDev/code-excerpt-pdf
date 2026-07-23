@@ -8,9 +8,21 @@ import { getToken } from "next-auth/jwt"
  * readable by the browser, and SPEC forbids the token appearing in any RSC
  * payload or log.
  */
-export async function readAccessToken(
-  request: Request
-): Promise<{ token: string; expired: boolean } | null> {
+export async function readAccessToken(request: Request): Promise<{
+  token: string
+  expired: boolean
+  /**
+   * The GitHub identity riding on the same JWT.
+   *
+   * Returned here rather than fetched with a second `auth()` call: both read
+   * and decrypt the same cookie, and a route that needs the token *and* a
+   * `userId` — the tree route, once it caches — would otherwise pay for that
+   * twice on its hottest path. Still not on the `Session`; this is the raw
+   * JWT, which the browser cannot read.
+   */
+  githubId?: string
+  githubLogin?: string
+} | null> {
   const jwt = await getToken({
     req: request as never,
     secret: process.env.AUTH_SECRET,
@@ -18,5 +30,10 @@ export async function readAccessToken(
   })
 
   if (!jwt?.accessToken) return null
-  return { token: jwt.accessToken, expired: jwt.error === "expired" }
+  return {
+    token: jwt.accessToken,
+    expired: jwt.error === "expired",
+    githubId: jwt.githubId,
+    githubLogin: jwt.githubLogin,
+  }
 }

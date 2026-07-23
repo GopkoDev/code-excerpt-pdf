@@ -121,6 +121,73 @@ describe("createGitHubSource", () => {
     await expect(source.listFiles()).rejects.toThrow(/not found/i)
   })
 
+  /**
+   * The manual Refresh control. The database tier is served without asking
+   * GitHub what the head SHA is now, so this is the only way a user who has
+   * just pushed can insist on a fresh listing — and it must reach GitHub, not
+   * merely re-read the same cached answer.
+   */
+  it("re-lists on refresh, telling the server to bypass the cache", async () => {
+    // A fresh Response per call — a body can only be read once.
+    const fetcher = vi.fn(async (input: string | URL) => {
+      void input
+      return json(treePayload)
+    })
+    const source = createGitHubSource(
+      { owner: "o", repo: "r" },
+      { fetcher: fetcher as unknown as typeof fetch }
+    )
+
+    await source.listFiles()
+    source.refresh()
+    await source.listFiles()
+
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    expect(String(fetcher.mock.calls[0][0])).not.toContain("refresh=1")
+    expect(String(fetcher.mock.calls[1][0])).toContain("refresh=1")
+
+    // And only once: the flag is consumed, not sticky, or every remount would
+    // spend a Trees call and the second tier would never pay for itself.
+    await source.listFiles()
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
+  it("drops cached content on refresh, so a changed file is re-read", async () => {
+    const fetcher = vi.fn(async (input: string | URL) => {
+      const url = String(input)
+      if (url.includes("/tree")) return json(treePayload)
+      return json({ base64: Buffer.from("abc").toString("base64") })
+    })
+    const source = createGitHubSource(
+      { owner: "o", repo: "r" },
+      { fetcher: fetcher as unknown as typeof fetch }
+    )
+
+    await source.listFiles()
+    await source.readFile("src/a.ts")
+    source.refresh()
+    await source.listFiles()
+    await source.readFile("src/a.ts")
+
+    const blobCalls = fetcher.mock.calls.filter(([u]) =>
+      String(u).includes("/blob")
+    )
+    expect(blobCalls).toHaveLength(2)
+  })
+
+  it("reports whether the listing came from the database tier", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(json({ ...treePayload, cached: true }))
+    const source = createGitHubSource(
+      { owner: "o", repo: "r" },
+      { fetcher: fetcher as unknown as typeof fetch }
+    )
+
+    await source.listFiles()
+    expect(source.isCached()).toBe(true)
+  })
+
   it("refuses to read a path the tree never listed", async () => {
     const fetcher = vi.fn().mockResolvedValue(json(treePayload))
     const source = createGitHubSource(

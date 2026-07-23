@@ -20,6 +20,8 @@ export function createGitHubSource(
 ): ContentSource & {
   isTruncated: () => boolean
   headSha: () => string | null
+  isCached: () => boolean
+  refresh: () => void
 } {
   const request = options.fetcher ?? fetch
 
@@ -30,6 +32,15 @@ export function createGitHubSource(
   const contents = new Map<string, Uint8Array>()
   let truncated = false
   let headSha: string | null = null
+  let cached = false
+  /**
+   * Consumed by the next listing and then cleared.
+   *
+   * Sticky would be worse than useless: every remount would spend a Trees call
+   * and the database tier would never pay for itself. Refresh is a one-shot
+   * instruction, not a mode.
+   */
+  let bypassCache = false
 
   async function loadTree(): Promise<ParsedTree> {
     if (treePromise) return treePromise
@@ -37,13 +48,19 @@ export function createGitHubSource(
     treePromise = (async () => {
       const params = new URLSearchParams({ owner, repo })
       if (ref) params.set("ref", ref)
+      if (bypassCache) params.set("refresh", "1")
+      bypassCache = false
 
       const response = await request(`/api/github/tree?${params}`)
-      const body = (await response.json()) as ParsedTree & { error?: string }
+      const body = (await response.json()) as ParsedTree & {
+        cached?: boolean
+        error?: string
+      }
       if (!response.ok) {
         throw new Error(body.error ?? "Could not read the repository tree.")
       }
 
+      cached = body.cached === true
       truncated = body.truncated
       headSha = body.headSha
       body.files.forEach((file) => blobShas.set(file.path, file.blobSha))
@@ -110,5 +127,35 @@ export function createGitHubSource(
      * tree has loaded — there is no revision to pin before then.
      */
     headSha: () => headSha,
+
+    /**
+     * True when this listing came from the database tier rather than GitHub.
+     *
+     * Surfaced so the page can say so. The second tier is served *without*
+     * asking GitHub what the head SHA is now — that is the entire saving — so
+     * a listing can legitimately be a few minutes behind, and the honest thing
+     * is to admit it next to the Refresh control rather than let the user
+     * discover it in an export.
+     */
+    isCached: () => cached,
+
+    /**
+     * Throw away everything held for this repository and re-list from GitHub.
+     *
+     * Deliberately NOT part of `ContentSource`: anonymous mode has nothing to
+     * refresh, and widening the seam that keeps the two modes identical for
+     * the benefit of one of them is how they start to drift. It sits beside
+     * `isTruncated` and `headSha`, which are GitHub-only for the same reason.
+     *
+     * Blobs go too. A new head means a path can point at different bytes, and
+     * a cached blob under a re-listed tree would export content the listing no
+     * longer describes.
+     */
+    refresh: () => {
+      treePromise = null
+      blobShas.clear()
+      contents.clear()
+      bypassCache = true
+    },
   }
 }

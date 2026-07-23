@@ -88,6 +88,14 @@ describe("prisma migrations", () => {
     expect(createdTables(owners[0].sql)).toEqual(["Classification"])
   })
 
+  it("introduces TreeCache in a migration of its own", () => {
+    const owners = migrations.filter((migration) =>
+      createdTables(migration.sql).includes("TreeCache")
+    )
+    expect(owners).toHaveLength(1)
+    expect(createdTables(owners[0].sql)).toEqual(["TreeCache"])
+  })
+
   it("never creates the same table twice", () => {
     const all = migrations.flatMap((migration) => createdTables(migration.sql))
     expect(all).toEqual([...new Set(all)])

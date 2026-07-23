@@ -30,7 +30,8 @@ code-excerpt-pdf/
 │       │                    #   Our own database only — no GitHub call
 │       └── github/
 │           ├── repos/route.ts    # installations → the repos each one can reach
-│           ├── tree/route.ts     # one recursive=1 Trees call per repo
+│           ├── tree/route.ts     # one recursive=1 Trees call per repo — or none,
+│           │                      #   on a TreeCache hit. ?refresh=1 bypasses it
 │           ├── blob/route.ts     # one file's content, lazily
 │           ├── refresh/route.ts  # THE ONLY place a token is refreshed
 │           └── setup/route.ts    # GitHub App Setup URL — idempotent
@@ -100,6 +101,10 @@ code-excerpt-pdf/
 │   │   │                    #   plus the trailing-slash codec for ManualOverride.scope
 │   │   ├── classifications.test.ts  # same in-memory-fake pattern, no database
 │   │   ├── classifications-db.ts    # the real ClassificationsDb adapter
+│   │   ├── tree-cache.ts    # the listing cache port + the Zod schema that is the
+│   │   │                    #   ONLY thing allowed into the `tree` Json column
+│   │   ├── tree-cache.test.ts       # TTL, head-move replacement, NDA key set
+│   │   ├── tree-cache-db.ts # the real TreeCacheDb adapter
 │   │   └── generated/       # GITIGNORED, produced by `prisma generate` (postinstall)
 │   ├── classifications/
 │   │   └── payload.ts       # Zod schema for POST /api/classifications — the second
@@ -115,7 +120,8 @@ code-excerpt-pdf/
 │   │   └── stats.ts         # share of a project's volume already filed
 │   ├── sources/
 │   │   ├── local.ts         # ContentSource over dropped files; LAZY reads
-│   │   ├── github.ts        # ContentSource over a repo; ONE Trees call, cached
+│   │   ├── github.ts        # ContentSource over a repo; ONE Trees call, cached.
+│   │   │                    #   refresh() is GitHub-only, deliberately off the seam
 │   │   └── github-cache.ts  # module-scoped instances, so a remount reuses that call
 │   ├── vendored/
 │   │   ├── types.ts         # Layer, Verdict, ManualOverride
@@ -144,7 +150,8 @@ code-excerpt-pdf/
 │   │                        #   --script`. NONE has been applied to a database yet
 │   │   ├── migration_lock.toml
 │   │   ├── 20260723120000_init/   # User, Repo, Export, UsedFile — four models, on purpose
-│   │   └── 20260723120100_add_classification/  # Classification alone (slice 8)
+│   │   ├── 20260723120100_add_classification/  # Classification alone (slice 8)
+│   │   └── 20260723120200_add_tree_cache/      # TreeCache alone (slice 9)
 │   └── migrations.test.ts   # reads the checked-in SQL: one concern per migration,
 │                            #   and no column that could hold code or a credential
 ├── scripts/
@@ -232,6 +239,12 @@ code-excerpt-pdf/
 - **A stored override deliberately records no hash and no size.** That absence is what makes it survive a content change: an override keyed on `contentHash` would be silently discarded the moment the file was edited, which is exactly what SPEC's acceptance criterion says must not happen. `lib/db/classifications.test.ts` asserts the row's key set, so adding one fails the suite.
 - **Overrides are written through, not batched.** `useFileSelection` applies the change locally and *then* reports it via `onOverrideChange`; `RepoWorkspace` posts it and names a failure in a banner rather than rolling the checkbox back under the user. Making the click await a round trip would slow the common case to tidy up the rare one — but a silently unsaved override is worse than a slow one, so it is never swallowed.
 - **Nothing outside `lib/db/exports-db.ts` and `lib/db/classifications-db.ts` may import Prisma.** Every query goes through a port (`lib/db/exports.ts`, `lib/db/classifications.ts`), which takes the client as a parameter — that is what makes the ledger's rules testable with no database at all, and it keeps the complete inventory of persisted fields readable in one file. `const db: ExportsDb = prisma` does **not** compile: Prisma's methods are generic (`SelectSubset<T, …>`) and a generic signature is not assignable to a concrete one. The adapter writes the calls out instead, which is what actually type-checks the port against the generated client — if the schema and the port drift, that file stops compiling.
+- **The tree is cached in two tiers, and only the first one is required.** `lib/sources/github-cache.ts` holds the answer for as long as the tab lives — that is what the "zero further GitHub calls" criterion rests on. `TreeCache` is the second tier and covers only what the first cannot: a new tab, a new device, a cold lambda. It is a **pure optimisation, and no acceptance criterion depends on it**; every part of it fails soft, so a database that is slow, absent or unreadable costs one Trees call and nothing else.
+- **A cache hit is served without asking GitHub what the head SHA is now.** That is the entire saving, and it is also why `TREE_CACHE_TTL_MS` exists: `{repoId}@{headSha}` invalidates the row when a *fetch* discovers a new head, but nothing discovers it while the cache is being read. The TTL bounds the staleness; the Refresh button is the escape hatch, and it costs exactly one Trees call, which is why it is a button rather than something the page does on its own.
+- **A request pinned to a commit SHA is never cached and never overwrites the cache.** Those come from `lib/exports/regenerate.ts`, which must re-list a past export at exactly that revision. Serving it the HEAD listing would rebuild a different document under the same date — the doubt the ledger exists to remove.
+- **`refresh()` is on the GitHub source, not on `ContentSource`.** Anonymous mode has nothing to refresh, and widening the seam that keeps the two modes identical for the benefit of one of them is how they start to drift. It sits beside `isTruncated()` and `headSha()` for the same reason. It also drops cached **blobs**, because a new head means a path can point at different bytes.
+- **Caching a listing creates the `Repo` row.** `TreeCache.repoId` is a foreign key, so merely *opening* a repository now writes one — where before a row appeared only on an export or an override. The database therefore learns which repositories were looked at, not only which were exported from. Stated here because it is exactly the kind of thing a `pg_dump` review should already know about rather than discover.
+- **`readAccessToken` returns `githubId`/`githubLogin` as well as the token.** Both are already on the JWT, and the tree route needs a `userId` on its hottest path; a second `auth()` call would decrypt the same cookie twice. Still nothing new on the `Session` — this is the raw JWT, which the browser cannot read.
 - **`Repo` is identified by `(userId, owner, name)`, not by `githubRepoId`** — a documented deviation from SPEC §3, argued at the bottom of `prisma/schema.prisma`. Nothing in the app ever holds the numeric id for free, and filling it would put a `GET /repos/{owner}/{repo}` on a path SPEC requires to cost no GitHub call. The trade: a renamed repository starts a fresh ledger.
 - **The access token is still not on the `Session`, but `githubId` and `githubLogin` now are.** Both are public information (a profile URL resolves to the id), and the export routes need an identity. Auth.js puts *no* id on `session.user` under the JWT strategy — verified in `@auth/core/lib/actions/session.js`, which builds `user` from `name`/`email`/`picture` only — so it is carried explicitly.
 - **The `signIn` callback's `User` upsert is allowed to fail silently.** A database hiccup must not cost a sign-in: anonymous mode needs no account and reading a repository needs no row. `POST /api/exports` upserts again before recording, so the row is self-healing. Nothing is logged there either — the error could carry the connection string.
