@@ -31,6 +31,8 @@ code-excerpt-pdf/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
 │   ├── uniqueness/
 │   │   └── hash.ts          # sha256Hex over RAW bytes — never post-normalization
+│   ├── sources/
+│   │   └── local.ts         # ContentSource over dropped files; LAZY reads, like GitHub's
 │   ├── tree/
 │   │   ├── types.ts         # FileEntry, TreeNode, ContentSource — THE source-agnostic seam
 │   │   ├── build.ts         # flat paths → nested tree, with folder aggregates
