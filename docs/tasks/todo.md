@@ -137,6 +137,31 @@ Acceptance — verified end to end in real headless Chrome over CDP:
 - [x] **No target input field exists anywhere in the UI** — the DOM holds exactly 2 file pickers
       and 8 checkboxes, zero number or text inputs
 - [x] Estimator never under-estimates by more than one page across the corpus (`estimate.test.ts`)
+      — **but see the limits below; the corpus was not representative**
+
+### Estimator limits — found after the slice closed
+
+The calibration corpus was this repo's own source, which contains no structured-data or
+blank-line-heavy files, so the guarantee held only for shapes it happened to include. Probing
+other shapes found real under-counting, and `lib/pdf/estimate.ts` now takes the file extension
+into account: sparse JSON went from 24 pages short to 3 over, stylesheets from 2 short to 2 over.
+
+**What is still wrong, and cannot be fixed from size alone:**
+
+- dense JSON over-counts by roughly 4x — its lines are nothing like any constant
+- bullet-list markdown still under-counts by ~3 pages
+- a file that is half blank lines under-counts hopelessly; no constant above 2 bytes/line covers it
+
+**Open question for a human:** SPEC's "never under-estimate by more than one page" is not
+achievable from `size` alone — bytes carry no information about line structure. Either the
+constants keep getting more conservative (which is what made dense JSON 4x over) or SPEC says the
+estimate is indicative and the exact running total is the real contract. Worth deciding before
+slice 5 leans on it.
+
+This matters less than it first appears: the estimate never feeds the running total, which is
+computed from exact measurements of the selected files — in GitHub mode too, since selecting a
+file is what fetches its blob. A bad estimate shows up as a surprising jump on selection, not a
+short export.
 - [x] Running total still equals the exported PDF exactly: 3 shown, 3 `/Type /Page` objects, 3
       reported
 

@@ -38,6 +38,56 @@ function corpusPaths(dir: string, acc: string[] = []): string[] {
   return acc
 }
 
+/**
+ * Structured formats break a size-only estimate.
+ *
+ * A deeply nested JSON file runs about 14 bytes per line — half of what source
+ * code averages — because most of each line is indentation and a short key.
+ * Estimating it at the code average under-counts it by tens of pages, which is
+ * exactly the direction SPEC says must not happen.
+ */
+describe("format-aware estimation", () => {
+  let metrics: Metrics
+
+  beforeAll(() => {
+    metrics = metricsOf(newDoc())
+  })
+
+  const deepJson = Array.from({ length: 3000 }, () => `      "key": 1,`).join(
+    "\n"
+  )
+
+  it("does not under-count a deeply indented JSON file", () => {
+    const doc = newDoc()
+    const bytes = new TextEncoder().encode(deepJson).length
+    const exact = paginate([measureFile(doc, "tree.json", deepJson)], metrics)
+    expect(estimatePages(bytes, metrics, "tree.json")).toBeGreaterThanOrEqual(
+      exact - 1
+    )
+  })
+
+  it("estimates more lines per byte for JSON than for TypeScript", () => {
+    expect(estimateLines(10_000, "a.json")).toBeGreaterThan(
+      estimateLines(10_000, "a.ts")
+    )
+  })
+
+  it("falls back to the code average for an unknown extension", () => {
+    expect(estimateLines(10_000, "a.zzz")).toBe(estimateLines(10_000, "a.ts"))
+    expect(estimateLines(10_000)).toBe(estimateLines(10_000, "a.ts"))
+  })
+
+  it("ignores case in the extension", () => {
+    expect(estimateLines(10_000, "A.JSON")).toBe(
+      estimateLines(10_000, "a.json")
+    )
+  })
+
+  it("handles a name with no extension at all", () => {
+    expect(estimateLines(10_000, "Makefile")).toBe(estimateLines(10_000))
+  })
+})
+
 describe("estimateLines", () => {
   it("is zero for an empty file", () => {
     expect(estimateLines(0)).toBe(0)
@@ -106,7 +156,7 @@ describe("estimatePages", () => {
         [measureFile(doc, path.split("/").pop()!, text)],
         metrics
       )
-      const estimated = estimatePages(sizeBytes, metrics)
+      const estimated = estimatePages(sizeBytes, metrics, path)
       if (estimated < exact - 1) {
         offenders.push(`${path}: estimated ${estimated}, exact ${exact}`)
       }
@@ -138,6 +188,8 @@ describe("estimatePages", () => {
     const cyrillic = "// Привіт, світ\n".repeat(200)
     const bytes = new TextEncoder().encode(cyrillic).length
     const exact = paginate([measureFile(newDoc(), "укр.ts", cyrillic)], metrics)
-    expect(estimatePages(bytes, metrics)).toBeGreaterThanOrEqual(exact)
+    expect(estimatePages(bytes, metrics, "укр.ts")).toBeGreaterThanOrEqual(
+      exact
+    )
   })
 })

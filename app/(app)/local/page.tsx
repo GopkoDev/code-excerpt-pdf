@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/empty"
 import { usePdfWorker } from "@/hooks/use-pdf-worker"
 import { decodeSourceFile } from "@/lib/files/decode"
-import { estimatePages, estimatePagesForSizes } from "@/lib/pdf/estimate"
+import { estimatePages, estimatePagesForFiles } from "@/lib/pdf/estimate"
 import { paginate, type MeasuredFile, type Metrics } from "@/lib/pdf/measure"
 import type { SourceFile } from "@/lib/pdf/render"
 import { createLocalSource, toLocalFiles } from "@/lib/sources/local"
@@ -214,7 +214,7 @@ export default function LocalPage() {
       if (node.kind === "file") {
         const exact = measured.get(node.path)
         return {
-          estimated: estimatePages(node.entry.sizeBytes, metrics),
+          estimated: estimatePages(node.entry.sizeBytes, metrics, node.name),
           exact: exact ? paginate([exact], metrics) : undefined,
         }
       }
@@ -228,8 +228,11 @@ export default function LocalPage() {
         files.length > 0 && counts.every((count) => count !== undefined)
 
       return {
-        estimated: estimatePagesForSizes(
-          files.map((file) => file.entry.sizeBytes),
+        estimated: estimatePagesForFiles(
+          files.map((file) => ({
+            name: file.name,
+            sizeBytes: file.entry.sizeBytes,
+          })),
           metrics
         ),
         exact: allMeasured
