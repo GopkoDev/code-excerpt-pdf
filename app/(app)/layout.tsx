@@ -40,6 +40,17 @@ export default async function AppLayout({
             <Button variant="ghost" size="sm" render={<Link href="/local" />}>
               Local export
             </Button>
+            {/* Only meaningful with an account — local export keeps no
+                history by design — so it is shown only when signed in. */}
+            {session?.user && (
+              <Button
+                variant="ghost"
+                size="sm"
+                render={<Link href="/exports" />}
+              >
+                Exports
+              </Button>
+            )}
           </nav>
 
           <div className="ml-auto flex items-center gap-2">

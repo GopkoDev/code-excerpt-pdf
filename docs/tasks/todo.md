@@ -387,15 +387,28 @@ Acceptance:
 
 ## Slices 7–11
 
-- [ ] **7 — Exports history + regeneration.** Re-fetch pinned SHAs; show original vs current page
-      count **informationally** (never as a gate); graceful `source-gone` pointing to the emailed
-      copy
+- [x] **7 — Exports history + regeneration.** `app/(app)/exports/page.tsx` lists past exports
+      newest first (zero GitHub calls to open it). A rebuild re-lists at the **pinned commit
+      SHA** — one Trees call per distinct SHA, never HEAD — and renders through the same worker.
+      Original vs rebuilt page count is shown **informationally**; `source-gone` points at the
+      emailed copy. `lib/exports/regenerate.ts` + test cover the whole decision table: a 404 on
+      the pinned tree is `source-gone`, a 429 throws so a rate limit is never mistaken for a
+      deleted repository, and a deleted file or a hash mismatch is reported while the rest is
+      still rebuilt. **Not exercised against real GitHub or a real database** — see below
 - [ ] **8 — Persisted classifications (migration 2).** Overrides survive refresh. NDA review
 - [ ] **9 — Neon `TreeCache` tier (migration 3).** Head-SHA invalidation, manual Refresh, TTL
       backstop. Pure optimization — no acceptance criterion depends on it. NDA review
 - [ ] **10 — Settings + GDPR.** Repo-access link out to GitHub, full data export, account deletion.
       **Must be last** — it enumerates the final schema
 - [ ] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on
+
+> **Slices 6 and 7 were built with no database reachable.** Migration 1 has never been applied,
+> so no query in this codebase has ever executed. Everything is proven against an in-memory fake
+> (`lib/db/exports.test.ts`) and an intercepted GitHub (`lib/exports/regenerate.test.ts`); the
+> Prisma call shapes are proven only by the generated types, through the adapter in
+> `lib/db/exports-db.ts`. Nothing in the browser has been driven end to end for these two slices.
+> Before either can be called done: run the migration, then sign in → export → reopen the repo →
+> re-download from the history page, on a real account.
 
 ## ▸ CHECKPOINT E — pre-launch
 

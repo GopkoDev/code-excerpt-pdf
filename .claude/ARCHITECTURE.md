@@ -17,6 +17,7 @@ code-excerpt-pdf/
 │   │   ├── layout.tsx       # authenticated shell: header, sign in/out, nav.
 │   │   │                    #   Reads the session but never gates — /local is anonymous
 │   │   ├── local/page.tsx   # anonymous export: drop zone + the shared SelectionPanel
+│   │   ├── exports/page.tsx # past exports; session gate only, list is client-side
 │   │   └── projects/
 │   │       ├── page.tsx     # repo picker; install CTA when nothing is installed
 │   │       └── [repoId]/page.tsx  # parses the id, checks the session, renders the workspace
@@ -41,6 +42,10 @@ code-excerpt-pdf/
 │   │   ├── repo-stats.tsx   # share of the repo's volume already filed — no API call
 │   │   └── repo-workspace.tsx   # loads the cached GitHub source into SelectionPanel,
 │   │                        #   loads the export ledger, records a finished export
+│   ├── exports/
+│   │   ├── exports-list.tsx # GET /api/exports, newest first. ZERO GitHub calls
+│   │   └── export-card.tsx  # one export + the rebuild: re-fetch pinned SHAs, render,
+│   │                        #   report original vs current pages INFORMATIONALLY
 │   ├── local/
 │   │   └── file-drop.tsx    # drop zone + file picker + webkitdirectory folder picker
 │   ├── selection/
@@ -92,8 +97,10 @@ code-excerpt-pdf/
 │   │   ├── exports-db.ts    # the real ExportsDb: Prisma narrowed to the port
 │   │   └── generated/       # GITIGNORED, produced by `prisma generate` (postinstall)
 │   ├── exports/
-│   │   └── payload.ts       # Zod schema for POST /api/exports — the ONLY shape a
-│   │                        #   browser can push into the database
+│   │   ├── payload.ts       # Zod schema for POST /api/exports — the ONLY shape a
+│   │   │                    #   browser can push into the database
+│   │   └── regenerate.ts    # re-fetches a past export at its PINNED commit SHAs,
+│   │                        #   one Trees call per distinct SHA. Never at HEAD
 │   ├── uniqueness/
 │   │   ├── hash.ts          # sha256Hex over RAW bytes — never post-normalization
 │   │   ├── status.ts        # used vs used-but-changed resolution
@@ -188,6 +195,9 @@ code-excerpt-pdf/
 - **`drawFiles()` in `lib/pdf/render.ts` is the only place the flow is drawn.** `measure.test.ts` validates its paginator against that function, not against a copy — so measurement and rendering cannot drift apart.
 - **A folder showing `~33p` before selection and `28p` after is correct, not a bug — do not "fix" it by measuring eagerly.** Exact counts need file content. Anonymous mode has it, but GitHub mode does not: fetching every blob just to label a tree is the API spend the two-tier design exists to avoid. Measuring everything up front in anonymous mode would also stop exercising the byte estimator on the main path, which is the only thing keeping it calibrated for GitHub mode. The estimate stays, and the `~` prefix is what makes it honest. Decision confirmed with the user 2026-07-23.
 - **A file that fails to decode must get `status: "unsupported"`, not just be deselected.** A listing knows only names and sizes, so a binary like `.DS_Store` is `available` until something reads it. If it stays `available` after failing, the next bulk select re-adds it, it fails again, and its folder can never reach "all" — it sits indeterminate and re-reports the same error on every click. `lib/tree/selection.ts` skips the status and counts it separately.
+- **A re-download re-lists the repository at the PINNED commit SHA, never at HEAD.** Re-listing at HEAD would quietly rebuild a different document under the same date — which is exactly the doubt the ledger exists to remove. `collectPinnedFiles` issues one Trees call per *distinct* pinned SHA, so an export taken in one sitting costs one call plus one blob per file.
+- **`source-gone` is a permanent verdict, so it must not swallow a temporary failure.** A 404 on the pinned tree means the repository or the revision is gone and the user is sent to their emailed copy; a 429, a 403 or an outage throws instead, because sending someone to their email for something that will work again in a minute is worse than an error. Deleted individual files and hash mismatches are neither — they are reported and the rest is still rebuilt.
+- **Original versus rebuilt page count is shown, never enforced.** A difference means the repository moved on. SPEC is explicit that this is informational; gating a re-download on it would make an old export undownloadable exactly when the user needs it most.
 - **`used` is derived exactly like `vendored` — per render, from the ledger, never written onto the entry.** `useFileSelection` applies the vendored resolver first and `resolveStatuses` second, and `resolveStatuses` only ever touches an `available` file: a vendored or unreadable file has been decided on other grounds, and stacking `used` on top would hide why it is unselectable.
 - **A missing content hash means "assume unchanged", not "unknown".** Only a fetched file can be told apart from the one that was filed, and in GitHub mode most files are never fetched. `resolveStatuses` resolves those to `used` rather than `available`, because a used file silently re-entering a listing is the one failure the product exists to prevent — and the user can still select it deliberately, with a warning.
 - **A used file is marked and warned about, never disabled.** The checkbox still works. `components/tree/selection-warning.tsx` is the same dialog vendored files use, because SPEC forbids hard-blocking in both cases and two dialogs would have drifted apart.
