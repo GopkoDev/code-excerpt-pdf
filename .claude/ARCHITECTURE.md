@@ -96,8 +96,11 @@ code-excerpt-pdf/
 │                            #   alert-dialog progress skeleton field input label
 ├── hooks/
 │   ├── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
-│   └── use-file-selection.ts # ALL state between a ContentSource and a PDF —
-│                            #   shared by anonymous mode and GitHub mode
+│   ├── use-file-selection.ts # ALL state between a ContentSource and a PDF —
+│   │                        #   shared by anonymous mode and GitHub mode
+│   └── use-file-selection.test.ts # the orchestration only this file has: the
+│                            #   decode-failure flow, folder-as-flow counting,
+│                            #   render cache, warn-then-proceed. jsdom.
 ├── lib/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
@@ -240,7 +243,7 @@ code-excerpt-pdf/
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
 - **`components/ui/checkbox.tsx`** — the one shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when _checked OR indeterminate_, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
 - **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. The page itself is now only the drop zone plus `SelectionPanel`; everything else lives in `useFileSelection`, which GitHub mode drives identically.
-- **Testing** — Vitest, `node` environment, no jsdom (add it only when a slice actually needs a component test). Tests are co-located as `*.test.ts` next to the module they cover. Run with `npm test` / `npm run test:watch`.
+- **Testing** — Vitest, `node` environment by default. A file that needs a DOM opts in per-file with a `// @vitest-environment jsdom` docblock (only `hooks/use-file-selection.test.ts` does), which keeps the pdfkit suites in `node` and needs no config split. `renderHook` comes from `@testing-library/react`; hook tests need no JSX, so everything stays `*.test.ts` and the include pattern is unchanged. Tests are co-located next to the module they cover. Run with `npm test` / `npm run test:watch`.
 - **`scripts/`** — build-time Node scripts, plain `.mjs`, outside the Next.js graph.
 - **`.claude/`** — Claude Code config and docs. `settings.json` is team-shared (committed); `settings.local.json` is personal and gitignored. Skills are consumed here via the symlink into `.agents/`.
 - **`.agents/skills/`** — cross-agent skill store created by the `skills` CLI. Real skill files live here; `.claude/skills/*` are symlinks into it. Only `shadcn` remains (the agent-skills pack was moved to a plugin in `settings.local.json`).
