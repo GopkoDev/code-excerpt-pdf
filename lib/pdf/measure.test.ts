@@ -166,7 +166,7 @@ describe("paginate", () => {
       files: Object.entries(CORPUS).map(([name, code]) => ({ name, code })),
     },
     {
-      label: "a file that exactly fills a page",
+      label: "a file spanning a page boundary",
       files: [{ name: "fill.ts", code: "x\n".repeat(69) }],
     },
     {

@@ -40,6 +40,7 @@ code-excerpt-pdf/
 │       │                    #   Changing geometry here is ask-first (SPEC §6)
 │       ├── measure.ts       # exact line counts (pdfkit's wrapper) + arithmetic paginator
 │       ├── measure.test.ts  # proves the paginator == pdfkit's own page count
+│       ├── estimate.ts      # size-only page estimate for UNFETCHED files, biased high
 │       ├── render.ts        # drawFiles() = the ONLY draw loop; renderPdf() → blob+count
 │       ├── render.test.ts   # single-run page count, alphabetical order, raw-byte hashing
 │       └── worker-protocol.ts   # message types shared by the page and the worker
