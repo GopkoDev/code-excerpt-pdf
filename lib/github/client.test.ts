@@ -107,12 +107,41 @@ describe("githubFetch", () => {
     expect(init.cache).toBe("no-store")
   })
 
+  it("resolves with the parsed JSON body on success", async () => {
+    stub(
+      new Response(JSON.stringify({ login: "octocat", id: 1 }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    )
+
+    await expect(githubFetch("/user", "token")).resolves.toEqual({
+      login: "octocat",
+      id: 1,
+    })
+  })
+
   it("maps an unreachable GitHub to 503, not to a generic failure", async () => {
     const error = await failureOf(reply(502))
     expect(statusForError(error)).toBe(503)
   })
 
+  it("carries an unrecognised status through to a 500", async () => {
+    const error = await failureOf(reply(418))
+    expect(error.kind).toBe("unknown")
+    expect(statusForError(error)).toBe(500)
+  })
+
   it("maps anything unrecognised to 500", () => {
     expect(statusForError(new Error("boom"))).toBe(500)
+  })
+})
+
+describe("statusForError", () => {
+  it("maps each GitHub error kind to its HTTP status", () => {
+    expect(statusForError(new GitHubError("unauthorized", "x"))).toBe(401)
+    expect(statusForError(new GitHubError("not-found", "x"))).toBe(404)
+    expect(statusForError(new GitHubError("forbidden", "x"))).toBe(403)
+    expect(statusForError(new GitHubError("unavailable", "x"))).toBe(503)
   })
 })

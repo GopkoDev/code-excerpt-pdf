@@ -65,8 +65,9 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
       a-only measure lands last. Mutation-verified — a stale-closure `setMeasured`
       wipes `b` and fails it; the functional update passes. Needed sizes large
       enough that dropping `b` changes the page count. (te #7)
-- [ ] **Task 8** — `client.test.ts`: assert `githubFetch` returns the parsed body;
-      `statusForError` 401/404; end-to-end 418 → unknown → 500. (te #3, #4)
+- [x] **Task 8** — Added `client.test.ts` coverage: `githubFetch` resolves with
+      the parsed JSON body; a `statusForError` describe pinning 401/404/403/503;
+      end-to-end 418 → `unknown` → 500. (te #3, #4)
 - [x] **Task 9** — Resolved `retryAfterSeconds`: **deleted** it (user's call — no
       client is set to honor a `Retry-After`). Removed the field from
       `ResponseProblem`, the computation in `describeResponse`, and the two dead
