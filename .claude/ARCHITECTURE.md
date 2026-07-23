@@ -52,7 +52,7 @@ code-excerpt-pdf/
 ├── skills-lock.json         # pins vendored skills (currently: shadcn)
 ├── .prettierrc / .prettierignore
 ├── .gitignore
-└── generate.js              # STANDALONE CommonJS pdfkit script. Not wired into the app — it is
+└── generate.cjs             # STANDALONE CommonJS pdfkit script. Not wired into the app — it is
                              #   the VISUAL REFERENCE for the exported PDF (A4, Courier 9pt code,
                              #   Helvetica-Bold 13pt titles). The app must keep matching it.
 ```
@@ -74,6 +74,6 @@ code-excerpt-pdf/
 - No `tailwind.config` file — Tailwind v4 is configured in `app/globals.css`.
 - **pdfkit is never imported as a module.** It is vendored as `public/vendor/pdfkit.standalone.js` and loaded by a Web Worker at runtime, so `next.config.ts` can stay empty (Next 16 builds with Turbopack, which cannot use pdfkit's webpack recipe). The copy is gitignored and regenerated on every `npm install`; edit `scripts/copy-pdfkit.mjs`, never the copy. It is excluded from ESLint and Prettier.
 - `npm run lint` currently fails on `generate.js` (`no-require-imports`) — pre-existing, and slice 0 renames it to `.cjs`.
-- `generate.js` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic.
+- `generate.cjs` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic. Its contract narrows to **geometry** (A4, 60pt margins, 9pt code, 13pt bold titles, `lineGap` 2, alphabetical, continuous flow); the typeface is deliberately different in the app, so page counts will not match. Run it as `node generate.cjs <dir>`; output lands in the gitignored `output/`.
 - `docs/SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch; the current app is still a fresh scaffold and implements none of it.
 - Two constraints in `docs/SPEC.md` are non-negotiable and easy to violate by accident: **no source code or generated PDFs are ever persisted** (metadata + hashes only), and auth is a **GitHub App with `Contents: Read-only`** — never a classic OAuth App, never `scope: "repo"` (that grants write access to every private repo).

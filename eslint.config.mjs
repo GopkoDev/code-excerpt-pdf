@@ -15,6 +15,12 @@ const eslintConfig = defineConfig([
     // Vendored third-party bundle, copied in by scripts/copy-pdfkit.mjs.
     "public/vendor/**",
   ]),
+  {
+    // Standalone CommonJS scripts run directly by node, outside the app.
+    // `require` is the whole point of the .cjs extension.
+    files: ["**/*.cjs"],
+    rules: { "@typescript-eslint/no-require-imports": "off" },
+  },
 ])
 
 export default eslintConfig

@@ -31,11 +31,12 @@ Legend: **[!]** blocks later work · **[ext]** human/external action with lead t
 
 Throwaway UI; timebox 1 day. Highest-value spike — everything downstream assumes it passes.
 
-- [ ] Rename `generate.js` → `generate.cjs` (it currently throws `ReferenceError: require is not
-defined` under `"type": "module"`) and update `.claude/ARCHITECTURE.md` in the same commit - [ ] The rename alone does **not** make `npm run lint` green: `@typescript-eslint/no-require-imports`
-      fires on `.cjs` too (3 errors today, the only thing keeping lint red). Add a `files: ["**/*.cjs"]`
-      override in `eslint.config.mjs` disabling that rule
-- [ ] Run `node generate.cjs <fixture-dir>` and keep the output as the geometry reference
+- [x] Rename `generate.js` → `generate.cjs` (it currently throws `ReferenceError: require is not
+defined` under `"type": "module"`) and update `.claude/ARCHITECTURE.md` in the same commit - [x] The rename alone does **not** make `npm run lint` green: `@typescript-eslint/no-require-imports`
+      fires on `.cjs` too. Added a `files: ["**/*.cjs"]` override in `eslint.config.mjs` disabling
+      that rule — `npm run lint` is now green for the first time
+- [x] Run `node generate.cjs <fixture-dir>` and keep the output as the geometry reference —
+      verified working (`node generate.cjs components`); `output/` is gitignored
 - [ ] Choose + subset a Unicode monospace font (regular + bold, Cyrillic coverage)
 - [ ] Throwaway page + Web Worker loading `pdfkit.standalone.js` from `/public/vendor/`
 - [ ] Collect chunks via `doc.on("data", …)` → `new Blob(...)`; **do not add `blob-stream`** (it

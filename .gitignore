@@ -35,6 +35,9 @@ pnpm-debug.log*
 # vendored at postinstall from node_modules/pdfkit (scripts/copy-pdfkit.mjs)
 /public/vendor/
 
+# generate.cjs writes its reference PDF here
+/output/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
