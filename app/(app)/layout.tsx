@@ -3,6 +3,7 @@ import { FileTextIcon } from "lucide-react"
 
 import { auth } from "@/auth"
 import { SignInButton, SignOutButton } from "@/components/auth/auth-buttons"
+import { SiteFooter } from "@/components/site-footer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 
@@ -100,6 +101,10 @@ export default async function AppLayout({
       )}
 
       {children}
+
+      {/* The same footer the marketing shell renders — it is how the legal
+          pages are reachable from inside the app, and it reads no session. */}
+      <SiteFooter />
     </div>
   )
 }

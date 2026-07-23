@@ -12,9 +12,11 @@ code-excerpt-pdf/
 │   ├── favicon.ico
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
-│   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
 │   ├── (marketing)/         # PUBLIC, and STATIC: no auth() anywhere under here, so
 │   │   │                    #   `next build` prerenders these (verified: ○ in the route table)
+│   │   ├── layout.tsx       # public shell: plain header + SiteFooter. NOT (app)/layout.tsx,
+│   │   │                    #   which calls auth() and would make all of this dynamic
+│   │   ├── page.tsx         # THE landing page, and the app's `/` — replaced the scaffold
 │   │   ├── marketing.test.ts    # pins every factual claim the legal pages make to the
 │   │   │                    #   code that makes it true — reads sources as text
 │   │   ├── terms/page.tsx   # terms of service — DRAFT, placeholders, not lawyer-reviewed
@@ -54,6 +56,8 @@ code-excerpt-pdf/
 │           └── setup/route.ts    # GitHub App Setup URL — idempotent
 ├── components/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
+│   ├── site-footer.tsx      # THE one footer, rendered by BOTH shells — it is how the
+│   │                        #   legal pages are reachable. No session, no client JS
 │   ├── auth/
 │   │   └── auth-buttons.tsx # sign in / out as Server Actions (they write cookies)
 │   ├── marketing/
@@ -226,7 +230,7 @@ code-excerpt-pdf/
 
 ## What each area is for
 
-- **`app/`** — the Next.js 16 App Router. `app/layout.tsx` carries fonts and the theme; `app/(app)/layout.tsx` is the authenticated shell (header, sign in/out, nav) that anonymous mode also renders under. `app/page.tsx` is still the scaffold placeholder.
+- **`app/`** — the Next.js 16 App Router. `app/layout.tsx` carries fonts and the theme; `app/(app)/layout.tsx` is the session-aware shell (header, sign in/out, nav) that anonymous mode also renders under; `app/(marketing)/layout.tsx` is the public one. There is no longer an `app/page.tsx` — `/` is the landing page in `(marketing)`.
 - **`app/(marketing)/`** — the public surface: landing, terms, privacy. Nothing under it calls `auth()` or reads the database, which is what keeps it prerenderable and what makes it work for a visitor with no account. The legal pages are **drafts pending legal review** and say so on the page; they name no company, jurisdiction or contact address, only bracketed placeholders the operator fills in. Their _technical_ claims are a different matter: `app/(marketing)/privacy/stored-data.ts` is pinned column-for-column to `prisma/schema.prisma`, and `marketing.test.ts` also checks the two claims a reader cannot verify — that opening a repository writes a `Repo` row, and that the GitHub grant requests no scope.
 - **`app/(app)/projects/`** — GitHub mode. `page.tsx` picks a repository, `[repoId]/page.tsx` opens one. Neither talks to GitHub: they resolve the session and hand off to a client component that goes through `app/api/github/*`.
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
@@ -296,5 +300,7 @@ code-excerpt-pdf/
 - **The data export re-validates `TreeCache.tree` on the way out, through the same Zod schema that guarded it on the way in.** It is the only Json column in the schema and therefore the only value in the export whose shape the type system does not already know. A subject-access request must not become the one path that hands back whatever happens to be sitting in that column.
 - **Deleting an account erases the uniqueness ledger, so previously exported files become selectable again.** That is correct — the record that they were used no longer exists, and keeping it would be keeping personal data after an erasure request — but it is the kind of consequence a user should be told about rather than discover, so the dialog says it.
 - `generate.cjs` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic. Its contract narrows to **geometry** (A4, 60pt margins, 9pt code, 13pt bold titles, `lineGap` 2, alphabetical, continuous flow); the typeface is deliberately different in the app, so page counts will not match. Run it as `node generate.cjs <dir>`; output lands in the gitignored `output/`.
-- `docs/SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch; the current app is still a fresh scaffold and implements none of it.
+- **The two shells exist because of one line: `auth()`.** `app/(app)/layout.tsx` reads the session to render a session-aware header, which makes every page under it dynamic. Marketing must not pay that — `/`, `/terms` and `/privacy` are the pages a stranger loads first and are prerendered, which the build's route table shows as `○`. Putting a marketing page under `(app)`, or an `auth()` call under `(marketing)`, silently loses that. `SiteFooter` is shared between them and deliberately reads nothing.
+- **The legal pages are drafts and must keep saying so.** Neither was written by a lawyer. `components/marketing/draft-notice.tsx` is the banner both open with, and `app/(marketing)/marketing.test.ts` fails if an email address, a company suffix, or fewer than three bracketed placeholders appear — so filling one in by inventing a value fails the suite. What the pages _may_ state is the technical truth, and that half is pinned: the stored-data inventory is compared column-for-column against `prisma/schema.prisma`, and the two claims a reader cannot check for themselves — that opening a repository writes a `Repo` row, and that the GitHub grant requests no scope — are asserted against `lib/db/tree-cache.ts` and `auth.ts`.
+- `docs/SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch, now also told on the landing page.
 - Two constraints in `docs/SPEC.md` are non-negotiable and easy to violate by accident: **no source code or generated PDFs are ever persisted** (metadata + hashes only), and auth is a **GitHub App with `Contents: Read-only`** — never a classic OAuth App, never `scope: "repo"` (that grants write access to every private repo).

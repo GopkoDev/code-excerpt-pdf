@@ -263,7 +263,7 @@ describe("paginate", () => {
       "lib/utils.ts",
       "lib/pdf/constants.ts",
       "app/layout.tsx",
-      "app/page.tsx",
+      "app/(marketing)/page.tsx",
       "components/theme-provider.tsx",
       "components/ui/button.tsx",
     ]

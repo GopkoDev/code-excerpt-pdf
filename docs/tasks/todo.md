@@ -7,6 +7,40 @@ Legend: **[!]** blocks later work · **[ext]** human/external action with lead t
 
 ---
 
+## ⚠ Status at a glance — read before trusting a checkbox
+
+**Every slice is code-complete. No line of this codebase has ever run against a real database
+or a real GitHub App.** `[x]` therefore means "proven by the test suite, or driven in a real
+browser against an intercepted GitHub" — never "observed working in production". The gap is not
+small and it is not evenly spread, so it is enumerated here rather than left to be reconstructed
+from eleven slices of notes.
+
+Everything still owed is one of the following, and **all of it needs a human** — credentials, a
+database, or a judgement call. Nothing on this list can be finished by writing code.
+
+| Owed                                               | Blocked on             | Where        |
+| -------------------------------------------------- | ---------------------- | ------------ |
+| **[ext]** Register the GitHub App                  | a GitHub account       | Checkpoint A |
+| **[ext]** Create the Neon project (both strings)   | a Neon account         | Checkpoint A |
+| **[ext]** Review the whole UX on a real repo       | a human opinion        | Checkpoint A |
+| **[ext]** **Apply migration 1** (`migrate deploy`) | the Neon project       | Slice 6      |
+| **[ext]** Auth security review                     | the GitHub App         | Checkpoint B |
+| **[ext]** API budget review, real network trace    | the GitHub App         | Checkpoint C |
+| **[ext]** NDA review of migration 1 (`pg_dump`)    | migration 1 applied    | Checkpoint D |
+| **[ext]** NDA review of migrations 2 and 3         | migrations 2–3 applied | Slices 8, 9  |
+| **[ext]** Exercise every DB path in a browser      | migration 1 applied    | Slices 6–10  |
+| **[ext]** Pre-launch pass, then the public link    | everything above       | Checkpoint E |
+
+Two consequences that are easy to miss:
+
+- **The SQL in `prisma/migrations/` has never executed.** It was produced offline with
+  `prisma migrate diff --script`, which opens no connection. Nothing here is evidence that it
+  applies cleanly — only that Prisma would generate it.
+- **The `onDelete: Cascade` declarations have never fired.** `deleteAccount` deletes every table
+  explicitly for exactly that reason, and the proof is against a fake that implements no cascade.
+
+---
+
 ## Setup — minimum shared groundwork
 
 - [x] `npm i pdfkit` (0.19.1) + `npm i -D @types/pdfkit`
@@ -213,9 +247,9 @@ Acceptance — verified in real headless Chrome:
 - [x] No object URL survives: both were revoked
 - [x] Non-ASCII and ligature-heavy files render (fixture used Cyrillic and `!==`)
 
-## ▸ CHECKPOINT A — full UX, zero infrastructure
+## ▸ CHECKPOINT A — full UX, zero infrastructure **[ext] — human only, nothing to code**
 
-- [ ] Review the whole experience on a real repo before any account or database exists
+- [ ] **[ext]** Review the whole experience on a real repo before any account or database exists
 - [ ] **[ext]** Register the GitHub App: `Contents: Read-only`, callback URL, **separate Setup
       URL**, "Request user authorization during installation" **unchecked**, "Expire user
       authorization tokens" **on**. Record client ID, secret, app slug
@@ -239,17 +273,21 @@ Acceptance — verified in real headless Chrome:
 
 Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a real deploy.
 
-- [ ] `auth.ts` (Auth.js v5, JWT strategy, **no adapter**), `app/api/auth/[...nextauth]/route.ts`
-- [ ] **Override provider scope to `""`** — the default is `read:user user:email`, and a GitHub App
+Written and type-checked; **none of it has ever completed a real OAuth round trip** — that is
+Checkpoint B, and it is the only thing standing between these boxes and being trustworthy.
+
+- [x] `auth.ts` (Auth.js v5, JWT strategy, **no adapter**), `app/api/auth/[...nextauth]/route.ts`
+- [x] **Override provider scope to `""`** — the default is `read:user user:email`, and a GitHub App
       ignores scopes entirely
-- [ ] Handle the private-email case: either grant account-level _Email addresses: Read_ or supply a
-      `profile()` tolerating a null email (otherwise it passes your test and fails in production)
-- [ ] `app/api/github/setup/route.ts` — dedicated Setup URL, **idempotent** (repo-selection changes
+- [x] Handle the private-email case: either grant account-level _Email addresses: Read_ or supply a
+      `profile()` tolerating a null email (otherwise it passes your test and fails in production).
+      Done with `profile()`; the callback keeps `email: null` rather than reaching `/user/emails`
+- [x] `app/api/github/setup/route.ts` — dedicated Setup URL, **idempotent** (repo-selection changes
       return through it too)
-- [ ] `app/api/github/refresh/route.ts` — the **only** place refresh happens; in-flight promise map
-      so parallel blob fetches cannot trigger parallel refreshes
-- [ ] `jwt` callback does **no network I/O** — it only sets `token.error = "expired"`
-- [ ] Track `refresh_token_expires_in` (6 months) → clean re-auth, not a 500
+- [x] `app/api/github/refresh/route.ts` — the **only** place refresh happens; in-flight promise map
+      (`lib/github/refresh-lock.ts`) so parallel blob fetches cannot trigger parallel refreshes
+- [x] `jwt` callback does **no network I/O** — it only sets `token.error = "expired"`
+- [x] Track `refresh_token_expires_in` (6 months) → clean re-auth, not a 500
 - [x] `lib/github/installation.ts` (`GET /user/installations` → `total_count === 0`) — now goes
       through `githubFetch`, so `client.ts` really is the only caller of api.github.com, and a
       revoked grant surfaces as the same mapped `GitHubError` as everything else
@@ -263,20 +301,22 @@ Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a r
 
 Acceptance:
 
-- [ ] Sign-in reaches only the repos selected at install
-- [ ] Authenticated-but-no-installation routes to the install URL, and the return lands on a
-      **working** page (not a CSRF error) — the install CTA is built and renders from
+- [ ] **[ext]** Sign-in reaches only the repos selected at install
+- [ ] **[ext]** Authenticated-but-no-installation routes to the install URL, and the return lands
+      on a **working** page (not a CSRF error) — the install CTA is built and renders from
       `totalCount === 0`; the round trip itself still needs a real App
-- [ ] Session survives refresh; expired token refreshes transparently under **5 concurrent**
-      requests
-- [ ] `grep -rn "repo" auth.ts` finds no scope
-- [ ] No token in any log or RSC payload
-- [ ] **Tested on a Vercel preview, not localhost** — in-process locks stop helping across lambdas
+- [ ] **[ext]** Session survives refresh; expired token refreshes transparently under **5
+      concurrent** requests
+- [x] `grep -rn "repo" auth.ts` finds no scope — the four hits are prose in comments
+- [ ] **[ext]** No token in any log or RSC payload. By construction the `Session` carries none
+      (`auth.ts`), but the RSC payload of a signed-in page has never been inspected
+- [ ] **[ext]** **Tested on a Vercel preview, not localhost** — in-process locks stop helping
+      across lambdas
 
-## ▸ CHECKPOINT B — auth security review
+## ▸ CHECKPOINT B — auth security review **[ext] — human only, needs the real GitHub App**
 
-- [ ] Dedicated manual pass (SPEC §5 accepts no e2e coverage here). Revoke on GitHub, refresh,
-      confirm graceful handling. Grep the build output for the client secret
+- [ ] **[ext]** Dedicated manual pass (SPEC §5 accepts no e2e coverage here). Revoke on GitHub,
+      refresh, confirm graceful handling. Grep the build output for the client secret
 
 ---
 
@@ -312,10 +352,11 @@ Acceptance:
 - [x] Export uses the identical pipeline to anonymous mode — literally the same hook and the
       same panel. Running total 3, preview 3, `/Type /Page` objects 3
 
-## ▸ CHECKPOINT C — API budget review
+## ▸ CHECKPOINT C — API budget review **[ext] — human only, needs the real GitHub App**
 
-- [ ] Confirm call counts in a real network trace before persistence obscures them; check headroom
-      against 5000/hr
+- [ ] **[ext]** Confirm call counts in a real network trace before persistence obscures them;
+      check headroom against 5000/hr. The counts are proven against an _intercepted_ GitHub
+      (slice 5) — this is the same check against the real one
 
 ---
 
@@ -378,12 +419,13 @@ Acceptance:
 - [ ] **[ext]** APPLY migration 1 against a real Neon database (`npx prisma migrate deploy`),
       then re-run the whole flow. The SQL exists but has never executed, no query has ever hit
       Postgres, and the compound key `userId_owner_name` is proven only by the generated types
-- [ ] Exercise sign-in → export → reopen the repo on a real database and confirm the row shows
-      as `used`
+- [ ] **[ext]** Exercise sign-in → export → reopen the repo on a real database and confirm the
+      row shows as `used`
 
-## ▸ CHECKPOINT D — NDA review of migration 1
+## ▸ CHECKPOINT D — NDA review of migration 1 **[ext] — human only, needs migration 1 APPLIED**
 
-- [ ] `pg_dump` and grep for source code and anything credential-shaped
+- [ ] **[ext]** `pg_dump` and grep for source code and anything credential-shaped. Impossible
+      until the migration above has actually run — there is no database to dump
 
 ---
 
@@ -451,7 +493,7 @@ Acceptance:
       `prisma/migrations.test.ts` still sees three one-concern migrations - [ ] **[ext]** Exercise the export **and** the delete on a real account. **Never run —
       no database is reachable.** Nothing in this slice has executed a query - [ ] **[ext]** Confirm the downloaded file's `Content-Disposition` actually saves as a
       file in a browser, and that the deletion redirect lands signed out on `/`
-- [ ] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on
+- [x] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on
   - [x] `app/(marketing)/terms/page.tsx` and `app/(marketing)/privacy/page.tsx`, both **drafts
         pending legal review** and both saying so in a banner at the top
         (`components/marketing/draft-notice.tsx`). Neither invents a company, a jurisdiction or a
@@ -466,7 +508,19 @@ Acceptance:
         suite fails instead of the page quietly becoming untrue
   - [x] Both pages are **static** — no `auth()` under `(marketing)/`, confirmed by `○ /terms`
         and `○ /privacy` in the build's route table
-  - [ ] Landing page + footer links from the app shell
+  - [x] `app/(marketing)/page.tsx` is now the app's `/` — the Next scaffold placeholder is
+        deleted. It explains the actual product (tree with per-file page counts, manual
+        selection, a measured running total, one paginated PDF, and a ledger so nothing appears
+        twice) and carries both doors: `/local` with no account, and sign-in
+  - [x] `components/site-footer.tsx`, rendered by **both** shells, so `/terms` and `/privacy`
+        are reachable from every page. `marketing.test.ts` asserts that wiring — an unreachable
+        privacy notice is the real failure mode
+  - [x] `app/(marketing)/layout.tsx` is a **separate shell** from `app/(app)/layout.tsx`, which
+        calls `auth()` and makes everything under it dynamic. Marketing stays static: `○ /`,
+        `○ /terms`, `○ /privacy` in the build's route table
+  - [ ] **[ext]** Fill in every bracketed placeholder on both legal pages, and have them read by
+        someone qualified before the public-instance link goes anywhere. The draft banner stays
+        until then
 
 > **Slices 6 and 7 were built with no database reachable.** Migration 1 has never been applied,
 > so no query in this codebase has ever executed. Everything is proven against an in-memory fake
@@ -476,17 +530,27 @@ Acceptance:
 > Before either can be called done: run the migration, then sign in → export → reopen the repo →
 > re-download from the history page, on a real account.
 
-## ▸ CHECKPOINT E — pre-launch
+## ▸ CHECKPOINT E — pre-launch **[ext] — human only, every item needs the real thing**
 
-- [ ] `pg_dump` inspection against the final schema
-- [ ] Exercise GDPR export **and** delete on a real account. What slice 10 could **not**
-      prove, because no database is reachable: - [ ] The deletion actually removes the rows in Postgres, not just in the fake — take a
-      `pg_dump` before and after and diff it. The port's completeness is proven; its
-      effect on a real database is not - [ ] `signOut` inside the Server Action really clears the cookie and redirects (Auth.js
-      allows cookie writes there, but this path has never run) - [ ] A `TreeCache.tree` written by the real cache writer round-trips through the export
-      unchanged — the test uses a hand-built row - [ ] Nothing outside the schema holds personal data: check hosting logs, Vercel
-      analytics, and any Neon backup or point-in-time-recovery window, which a database
-      deletion does **not** reach and which a GDPR answer must account for
-- [ ] ToS and privacy live
-- [ ] Rate-limit behaviour verified on a large repo
-- [ ] Only then: put the public-instance link in the repo description
+Nothing in this checkpoint can be finished by writing code. It is the list of claims the app
+already makes that have never been observed to hold.
+
+- [ ] **[ext]** `pg_dump` inspection against the final six-model schema
+- [ ] **[ext]** Exercise the GDPR export **and** the delete on a real account. Four things slice
+      10 could not prove, because no database was reachable:
+  - [ ] **[ext]** The deletion actually removes the rows in Postgres, not just in the fake —
+        take a `pg_dump` before and after and diff it. The port's completeness is proven; its
+        effect on a real database is not
+  - [ ] **[ext]** `signOut` inside the Server Action really clears the cookie and redirects
+        (Auth.js allows cookie writes there, but this path has never run)
+  - [ ] **[ext]** A `TreeCache.tree` written by the real cache writer round-trips through the
+        export unchanged — the test uses a hand-built row
+  - [ ] **[ext]** Nothing outside the schema holds personal data: check hosting logs, Vercel
+        analytics, and the Neon backup / point-in-time-recovery window, which a row deletion
+        does **not** reach and which a GDPR answer must account for. `/privacy` already says
+        this — the retention window itself is one of the placeholders to fill in
+- [ ] **[ext]** ToS and privacy live: fill in every bracketed placeholder on both pages and have
+      them reviewed. They ship as **drafts**, and the banner on each says so; publishing them as
+      finished text without a review would be the one claim on those pages that is not true
+- [ ] **[ext]** Rate-limit behaviour verified on a large repo
+- [ ] **[ext]** Only then: put the public-instance link in the repo description

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { describe, expect, it } from "vitest"
@@ -41,6 +41,35 @@ const LEGAL_PAGES = [
   { name: "terms", source: TERMS },
   { name: "privacy", source: PRIVACY },
 ]
+
+// ---------------------------------------------------------------------------
+// 0. The pages exist, and can be reached
+// ---------------------------------------------------------------------------
+
+describe("the marketing surface", () => {
+  it("owns `/`, so the scaffold placeholder is gone", () => {
+    expect(existsSync(join(ROOT, "app", "(marketing)", "page.tsx"))).toBe(true)
+    // Two files claiming `/` is a build error, but the scaffold page is also
+    // the thing this slice exists to replace — so say it here too.
+    expect(existsSync(join(ROOT, "app", "page.tsx"))).toBe(false)
+  })
+
+  it("sends a visitor to both entry points: no account, or an account", () => {
+    const landing = read("app", "(marketing)", "page.tsx")
+    expect(landing).toContain('href="/local"')
+    expect(landing).toContain("<SignInButton")
+  })
+
+  it("reaches the legal pages from a footer both shells render", () => {
+    const footer = read("components", "site-footer.tsx")
+    expect(footer).toContain('href="/terms"')
+    expect(footer).toContain('href="/privacy"')
+
+    // A privacy notice nobody can navigate to is the actual failure mode.
+    expect(read("app", "(marketing)", "layout.tsx")).toContain("<SiteFooter")
+    expect(read("app", "(app)", "layout.tsx")).toContain("<SiteFooter")
+  })
+})
 
 // ---------------------------------------------------------------------------
 // 1. Drafts, and honest about it
