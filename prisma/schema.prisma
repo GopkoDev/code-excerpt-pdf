@@ -1,10 +1,17 @@
-// Migration 1 — deliberately FOUR models, not six.
+// Three migrations, one concern each — never one migration with six models.
 //
 // SPEC §6 makes any new persisted field that could carry code or secrets an
-// ask-first action, and Checkpoint D reviews this migration with `pg_dump`.
-// That review is meaningful on a four-model diff and worthless on a six-model
-// one, so Classification (migration 2) and TreeCache (migration 3) are held
-// back on purpose.
+// ask-first action, and each checkpoint reviews a migration with `pg_dump`.
+// That review is meaningful on a small diff and worthless on a big one, so:
+//
+//   migration 1 `_init`               User, Repo, Export, UsedFile
+//   migration 2 `_add_classification` Classification — a NEW NDA surface: it
+//                                     stores user-written globs, i.e. paths
+//   migration 3 `_add_tree_cache`     TreeCache — a NEW NDA surface: it stores
+//                                     a whole repository listing
+//
+// `prisma/migrations.test.ts` enforces that separation, and that no column in
+// any of them is content-shaped.
 //
 // The hard constraint, visible in every model below: NO SOURCE CODE IS EVER
 // STORED. Only paths, commit SHAs, content hashes and sizes.
@@ -22,14 +29,14 @@ datasource db {
 }
 
 model User {
-  id            String   @id @default(cuid())
+  id        String   @id @default(cuid())
   // GitHub's numeric account id, as a string. The join key to the provider.
-  githubId      String   @unique
-  login         String
-  createdAt     DateTime @default(now())
+  githubId  String   @unique
+  login     String
+  createdAt DateTime @default(now())
 
-  repos         Repo[]
-  exports       Export[]
+  repos   Repo[]
+  exports Export[]
 }
 
 model Repo {
@@ -43,9 +50,10 @@ model Repo {
   defaultBranch String?
   createdAt     DateTime @default(now())
 
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  usedFiles     UsedFile[]
-  exports       Export[]
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  usedFiles       UsedFile[]
+  exports         Export[]
+  classifications Classification[]
 
   // A user may only ever hold one row per repository. `owner`/`name` is the
   // identity, because it is the only one the app holds without spending a
@@ -54,17 +62,17 @@ model Repo {
 }
 
 model Export {
-  id           String   @id @default(cuid())
-  userId       String
-  repoId       String?
+  id          String   @id @default(cuid())
+  userId      String
+  repoId      String?
   // The page count of the run that produced the downloaded bytes — never a
   // second render. No threshold, no payout: SPEC forbids encoding tax rules.
-  actualPages  Int
-  createdAt    DateTime @default(now())
+  actualPages Int
+  createdAt   DateTime @default(now())
 
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  repo         Repo?      @relation(fields: [repoId], references: [id], onDelete: SetNull)
-  usedFiles    UsedFile[]
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repo      Repo?      @relation(fields: [repoId], references: [id], onDelete: SetNull)
+  usedFiles UsedFile[]
 
   @@index([userId, createdAt])
 }
@@ -84,11 +92,47 @@ model UsedFile {
   sizeBytes   Int
   createdAt   DateTime @default(now())
 
-  repo        Repo   @relation(fields: [repoId], references: [id], onDelete: Cascade)
-  export      Export @relation(fields: [exportId], references: [id], onDelete: Cascade)
+  repo   Repo   @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  export Export @relation(fields: [exportId], references: [id], onDelete: Cascade)
 
   @@index([repoId, path])
   @@index([exportId])
+}
+
+/// Manual vendored/authored overrides — migration 2.
+///
+/// A NEW NDA SURFACE, and the reason this is its own migration: it is the
+/// first table whose contents are written by the user rather than derived from
+/// a listing. It stores **paths and globs** — which do reveal a repository's
+/// shape — and nothing else. No content, no sizes, no hashes: an override says
+/// only "treat this path as mine" or "treat it as not mine".
+enum ClassificationKind {
+  VENDORED
+  AUTHORED
+}
+
+model Classification {
+  id         String             @id @default(cuid())
+  repoId     String
+  /// The rule, in the gitignore subset `lib/vendored/glob.ts` implements.
+  ///
+  /// A file rule is the bare repo-relative path (`components/ui/button.tsx`);
+  /// a folder rule carries a trailing slash (`components/ui/`) and cascades to
+  /// every descendant, including files that appear later. That trailing slash
+  /// is the whole encoding of `ManualOverride.scope`, which is why SPEC §3's
+  /// three fields are enough and no `scope` column exists — see the note in
+  /// `lib/db/classifications.ts`.
+  pathOrGlob String
+  kind       ClassificationKind
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  repo Repo @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  /// One rule per path per repo — re-marking a file updates it rather than
+  /// stacking a second, contradictory row that the resolver would have to
+  /// break a tie between.
+  @@unique([repoId, pathOrGlob])
 }
 
 // ---------------------------------------------------------------------------

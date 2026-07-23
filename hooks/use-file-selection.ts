@@ -48,7 +48,21 @@ export type Rejected = { path: string; reason: string }
 
 export type FileSelection = ReturnType<typeof useFileSelection>
 
-export function useFileSelection() {
+export type FileSelectionOptions = {
+  /**
+   * Called whenever the user re-classifies a path, so a mode that has a
+   * database can make the decision durable.
+   *
+   * Optional because anonymous mode has nowhere to put it: it persists
+   * nothing, so an override there lives and dies with the tab — which is the
+   * whole difference between the two modes and not a gap in either.
+   */
+  onOverrideChange?: (override: ManualOverride) => void
+}
+
+export function useFileSelection({
+  onOverrideChange,
+}: FileSelectionOptions = {}) {
   const { send } = usePdfWorker()
 
   const [source, setSource] = useState<ContentSource | null>(null)
@@ -157,14 +171,20 @@ export function useFileSelection() {
   )
 
   const setOverride = useCallback(
-    (path: string, scope: "file" | "folder", vendored: boolean) =>
+    (path: string, scope: "file" | "folder", vendored: boolean) => {
+      const override: ManualOverride = { path, scope, vendored }
+      // Applied locally first, then reported. The tree must respond to the
+      // click even if the write fails; the caller says so out loud rather than
+      // rolling the row back under the user.
       setOverrides((current) => [
         ...current.filter(
           (item) => !(item.path === path && item.scope === scope)
         ),
-        { path, scope, vendored },
-      ]),
-    []
+        override,
+      ])
+      onOverrideChange?.(override)
+    },
+    [onOverrideChange]
   )
 
   const handleToggleVendored = useCallback(
@@ -576,6 +596,8 @@ export function useFileSelection() {
     setIsPreviewOpen,
     setPendingWarning,
     setUsedFiles,
+    /** Seeds the persisted overrides on open — see `RepoWorkspace`. */
+    setOverrides,
     toggleExpand,
     handleToggleSelect,
     handleToggleVendored,

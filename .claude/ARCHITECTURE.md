@@ -24,9 +24,10 @@ code-excerpt-pdf/
 │   └── api/
 │       ├── auth/[...nextauth]/route.ts  # Auth.js handlers
 │       ├── exports/
-│       │   ├── route.ts       # POST records an export, GET lists them.
-│       │   │                  #   THE only write path in the app
+│       │   ├── route.ts       # POST records an export, GET lists them
 │       │   └── used/route.ts  # the ledger for one repo — no GitHub call
+│       ├── classifications/route.ts  # GET/POST manual vendored overrides for one repo.
+│       │                    #   Our own database only — no GitHub call
 │       └── github/
 │           ├── repos/route.ts    # installations → the repos each one can reach
 │           ├── tree/route.ts     # one recursive=1 Trees call per repo
@@ -95,7 +96,14 @@ code-excerpt-pdf/
 │   │   │                    #   taking the client as a parameter
 │   │   ├── exports.test.ts  # proves the port against an in-memory fake — no database
 │   │   ├── exports-db.ts    # the real ExportsDb: Prisma narrowed to the port
+│   │   ├── classifications.ts       # the persistence port for manual vendored overrides,
+│   │   │                    #   plus the trailing-slash codec for ManualOverride.scope
+│   │   ├── classifications.test.ts  # same in-memory-fake pattern, no database
+│   │   ├── classifications-db.ts    # the real ClassificationsDb adapter
 │   │   └── generated/       # GITIGNORED, produced by `prisma generate` (postinstall)
+│   ├── classifications/
+│   │   └── payload.ts       # Zod schema for POST /api/classifications — the second
+│   │                        #   write path, guarded exactly like the first
 │   ├── exports/
 │   │   ├── payload.ts       # Zod schema for POST /api/exports — the ONLY shape a
 │   │   │                    #   browser can push into the database
@@ -135,7 +143,8 @@ code-excerpt-pdf/
 │   ├── migrations/          # hand-placed, generated OFFLINE by `prisma migrate diff
 │   │                        #   --script`. NONE has been applied to a database yet
 │   │   ├── migration_lock.toml
-│   │   └── 20260723120000_init/   # User, Repo, Export, UsedFile — four models, on purpose
+│   │   ├── 20260723120000_init/   # User, Repo, Export, UsedFile — four models, on purpose
+│   │   └── 20260723120100_add_classification/  # Classification alone (slice 8)
 │   └── migrations.test.ts   # reads the checked-in SQL: one concern per migration,
 │                            #   and no column that could hold code or a credential
 ├── scripts/
@@ -182,7 +191,7 @@ code-excerpt-pdf/
 - **`app/(app)/projects/`** — GitHub mode. `page.tsx` picks a repository, `[repoId]/page.tsx` opens one. Neither talks to GitHub: they resolve the session and hand off to a client component that goes through `app/api/github/*`.
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
-- **`lib/db/` + `lib/exports/`** — persistence, kept deliberately thin. `exports.ts` is a *port*: it receives the Prisma client as a parameter, so every rule it encodes (a repo row is reused, one `UsedFile` per file, a ledger never crosses users) is proven in `exports.test.ts` against an in-memory fake, with no database anywhere. `exports-db.ts` is the one adapter that hands it the real client. Nothing else in the app imports Prisma.
+- **`lib/db/` + `lib/exports/` + `lib/classifications/`** — persistence, kept deliberately thin. `exports.ts` and `classifications.ts` are *ports*: each receives the Prisma client as a parameter, so every rule they encode (a repo row is reused, one `UsedFile` per file, one rule per path, a ledger never crosses users) is proven against an in-memory fake with no database anywhere. `exports-db.ts` and `classifications-db.ts` are the only adapters that hand them the real client. Nothing else in the app imports Prisma. Both share `UsersDb`, because `User` is identity and belongs to neither.
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
 - **`components/ui/checkbox.tsx`** — the one shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when *checked OR indeterminate*, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
 - **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. The page itself is now only the drop zone plus `SelectionPanel`; everything else lives in `useFileSelection`, which GitHub mode drives identically.
@@ -219,7 +228,10 @@ code-excerpt-pdf/
 - **A `ContentSource` for a repository lives in module scope, not in React state.** SPEC: navigating away from a repo and back in the same session issues zero further GitHub calls — but navigating remounts the page, and a source built in the component would repeat the Trees call. `lib/sources/github-cache.ts` holds the instances; the source *is* the cache, so no query library wraps it. **No React Query was added**: nothing left for it to cache, and it would have been a second place for the same truth to live.
 - **The repository page fetches `.gitattributes` and `components.json` on open** (one blob call each, only if the tree lists them). Vendored detection needs them, and they are the same two files anonymous mode reads. It is a deliberate two-request cost per repo, not a leak in the "content only for selected files" rule.
 - **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The client half is `lib/github/refreshing-fetch.ts`: it recognises `401 token-expired`, posts to that one route, and retries once — with a single-flight promise, because selecting a folder fires several blob reads at once and GitHub's refresh tokens are single-use. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
-- **Nothing outside `lib/db/exports-db.ts` may import Prisma.** Every query goes through the port in `lib/db/exports.ts`, which takes the client as a parameter — that is what makes the ledger's rules testable with no database at all, and it keeps the complete inventory of persisted fields readable in one file. `const db: ExportsDb = prisma` does **not** compile: Prisma's methods are generic (`SelectSubset<T, …>`) and a generic signature is not assignable to a concrete one. The adapter writes the calls out instead, which is what actually type-checks the port against the generated client — if the schema and the port drift, that file stops compiling.
+- **`Classification` has no `scope` column, and that is deliberate.** `ManualOverride` distinguishes a file rule from a folder rule, but SPEC §3 gives the model three fields — and both hold, because `pathOrGlob` is a *glob*: a folder rule is stored with a trailing slash (`components/ui/`), which is the gitignore convention `lib/vendored/glob.ts` already implements, and a file rule is the bare path. The codec is `toPathOrGlob`/`toOverride` in `lib/db/classifications.ts`. Adding a column instead would have been a second encoding of something the pattern language already expresses.
+- **A stored override deliberately records no hash and no size.** That absence is what makes it survive a content change: an override keyed on `contentHash` would be silently discarded the moment the file was edited, which is exactly what SPEC's acceptance criterion says must not happen. `lib/db/classifications.test.ts` asserts the row's key set, so adding one fails the suite.
+- **Overrides are written through, not batched.** `useFileSelection` applies the change locally and *then* reports it via `onOverrideChange`; `RepoWorkspace` posts it and names a failure in a banner rather than rolling the checkbox back under the user. Making the click await a round trip would slow the common case to tidy up the rare one — but a silently unsaved override is worse than a slow one, so it is never swallowed.
+- **Nothing outside `lib/db/exports-db.ts` and `lib/db/classifications-db.ts` may import Prisma.** Every query goes through a port (`lib/db/exports.ts`, `lib/db/classifications.ts`), which takes the client as a parameter — that is what makes the ledger's rules testable with no database at all, and it keeps the complete inventory of persisted fields readable in one file. `const db: ExportsDb = prisma` does **not** compile: Prisma's methods are generic (`SelectSubset<T, …>`) and a generic signature is not assignable to a concrete one. The adapter writes the calls out instead, which is what actually type-checks the port against the generated client — if the schema and the port drift, that file stops compiling.
 - **`Repo` is identified by `(userId, owner, name)`, not by `githubRepoId`** — a documented deviation from SPEC §3, argued at the bottom of `prisma/schema.prisma`. Nothing in the app ever holds the numeric id for free, and filling it would put a `GET /repos/{owner}/{repo}` on a path SPEC requires to cost no GitHub call. The trade: a renamed repository starts a fresh ledger.
 - **The access token is still not on the `Session`, but `githubId` and `githubLogin` now are.** Both are public information (a profile URL resolves to the id), and the export routes need an identity. Auth.js puts *no* id on `session.user` under the JWT strategy — verified in `@auth/core/lib/actions/session.js`, which builds `user` from `name`/`email`/`picture` only — so it is carried explicitly.
 - **The `signIn` callback's `User` upsert is allowed to fail silently.** A database hiccup must not cost a sign-in: anonymous mode needs no account and reading a repository needs no row. `POST /api/exports` upserts again before recording, so the row is self-healing. Nothing is logged there either — the error could carry the connection string.

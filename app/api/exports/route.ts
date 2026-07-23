@@ -8,10 +8,11 @@ import { parseExportRequest } from "@/lib/exports/payload"
 /**
  * The uniqueness ledger: `POST` records an export, `GET` lists them.
  *
- * This is the **only** write path in the app, which is why the payload is
- * parsed by a schema that names every field it keeps (`lib/exports/payload.ts`)
- * rather than being spread into Prisma. What lands in the database is a path, a
- * commit SHA, a content hash and a size — never a byte of source, never a PDF.
+ * One of the app's two write paths (the other is `/api/classifications`), which
+ * is why the payload is parsed by a schema that names every field it keeps
+ * (`lib/exports/payload.ts`) rather than being spread into Prisma. What lands in
+ * the database is a path, a commit SHA, a content hash and a size — never a byte
+ * of source, never a PDF.
  *
  * Note what this route does **not** do: talk to GitHub. It records what the
  * browser already rendered, so it costs nothing against the API budget, and the

@@ -80,6 +80,14 @@ describe("prisma migrations", () => {
     ])
   })
 
+  it("introduces Classification in a migration of its own", () => {
+    const owners = migrations.filter((migration) =>
+      createdTables(migration.sql).includes("Classification")
+    )
+    expect(owners).toHaveLength(1)
+    expect(createdTables(owners[0].sql)).toEqual(["Classification"])
+  })
+
   it("never creates the same table twice", () => {
     const all = migrations.flatMap((migration) => createdTables(migration.sql))
     expect(all).toEqual([...new Set(all)])

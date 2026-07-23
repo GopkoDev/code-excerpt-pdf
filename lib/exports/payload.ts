@@ -1,8 +1,9 @@
 /**
- * The only shape a browser can push into the database.
+ * The only shape a browser can push into the export ledger.
  *
- * `POST /api/exports` is the single write path in the app, so this schema is
- * where the NDA constraint is actually enforced rather than merely intended:
+ * `POST /api/exports` is one of the app's two write paths — the other is
+ * `/api/classifications`, guarded the same way — so this schema is where the
+ * NDA constraint is actually enforced rather than merely intended:
  * Zod strips every key it does not name, so a client that sends `content` or
  * `text` alongside a path cannot get it as far as Prisma. Read the field list
  * below as the complete inventory of what leaves the browser.
@@ -26,8 +27,12 @@ const ContentHash = z.string().regex(/^[0-9a-f]{64}$/)
 /**
  * A repository-relative path. Never absolute, never climbing out: GitHub does
  * not produce either, so one arriving here is a client that was tampered with.
+ *
+ * Exported because `lib/classifications/payload.ts` guards the app's other
+ * write path with the same rule. One definition, deliberately — a security
+ * check copied into two files is a security check that drifts.
  */
-const RepoPath = z
+export const RepoPath = z
   .string()
   .min(1)
   .max(1024)

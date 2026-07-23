@@ -66,12 +66,14 @@ export type ExportSummary = {
 }
 
 /**
- * The slice of the Prisma client this module uses.
+ * Identity, split out because `User` is not owned by exports.
  *
- * Written by hand rather than derived from `PrismaClient`, so a fake can
- * implement it in a few lines. Structurally satisfied by the real client.
+ * Every port that has to turn a GitHub account into a `userId` needs exactly
+ * this and nothing else — `ClassificationsDb` and `TreeCacheDb` both compose
+ * it — so `upsertUser`/`findUser` ask for this rather than for a whole
+ * `ExportsDb` they would only use one field of.
  */
-export type ExportsDb = {
+export type UsersDb = {
   user: {
     upsert(args: {
       where: { githubId: string }
@@ -82,6 +84,15 @@ export type ExportsDb = {
       where: { githubId: string }
     }): Promise<{ id: string } | null>
   }
+}
+
+/**
+ * The slice of the Prisma client this module uses.
+ *
+ * Written by hand rather than derived from `PrismaClient`, so a fake can
+ * implement it in a few lines. Structurally satisfied by the real client.
+ */
+export type ExportsDb = UsersDb & {
   repo: {
     upsert(args: {
       where: {
@@ -141,7 +152,7 @@ export type ExportsDb = {
  * would have done for us.
  */
 export async function upsertUser(
-  db: ExportsDb,
+  db: UsersDb,
   { githubId, login }: { githubId: string; login: string }
 ): Promise<{ id: string }> {
   return db.user.upsert({
@@ -154,7 +165,7 @@ export async function upsertUser(
 }
 
 export async function findUser(
-  db: ExportsDb,
+  db: UsersDb,
   githubId: string
 ): Promise<{ id: string } | null> {
   return db.user.findUnique({ where: { githubId } })

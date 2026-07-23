@@ -13,6 +13,7 @@ import { githubApiFetch } from "@/lib/github/refreshing-fetch"
 import type { RenderResult } from "@/lib/pdf/render"
 import { getGitHubSource } from "@/lib/sources/github-cache"
 import type { UsedFileRecord } from "@/lib/uniqueness/status"
+import type { ManualOverride } from "@/lib/vendored"
 
 /**
  * A repository, browsed exactly the way a dropped folder is.
@@ -30,10 +31,43 @@ export function RepoWorkspace({
   owner: string
   repo: string
 }) {
-  const selection = useFileSelection()
-  const { loadSource, setUsedFiles, describeSelection } = selection
   const [isTruncated, setIsTruncated] = useState(false)
   const [ledgerError, setLedgerError] = useState<string | null>(null)
+  const [overridesError, setOverridesError] = useState<string | null>(null)
+
+  /**
+   * A re-classification is written through immediately, so it survives a
+   * reload — the difference between this and anonymous mode.
+   *
+   * Fire-and-report rather than await-and-block: the tree has already moved,
+   * and making the checkbox wait on a round trip would make the common case
+   * feel broken to fix the rare one. A failure is named instead of swallowed,
+   * because an override that silently did not save is the kind of thing the
+   * user only discovers a month later, in a listing that is now wrong.
+   */
+  const persistOverride = useCallback(
+    (override: ManualOverride) => {
+      setOverridesError(null)
+      void fetch("/api/classifications", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo: { owner, name: repo }, override }),
+      })
+        .then((response) => {
+          if (!response.ok) throw new Error("The server refused it.")
+        })
+        .catch(() =>
+          setOverridesError(
+            `“${override.path}” was re-classified here, but the change could not be saved and will be lost on reload.`
+          )
+        )
+    },
+    [owner, repo]
+  )
+
+  const selection = useFileSelection({ onOverrideChange: persistOverride })
+  const { loadSource, setUsedFiles, setOverrides, describeSelection } =
+    selection
 
   useEffect(() => {
     // Cached in module scope, so coming back to this repo in the same session
@@ -73,6 +107,33 @@ export function RepoWorkspace({
       setLedgerError(cause instanceof Error ? cause.message : String(cause))
     )
   }, [loadLedger])
+
+  /**
+   * The user's own classifications, restored before the first paint of the
+   * tree — the resolver takes them as its highest-precedence layer, so a file
+   * un-marked last month is authored again the moment they arrive.
+   *
+   * Also our own database, not GitHub: no API budget is spent.
+   */
+  useEffect(() => {
+    const params = new URLSearchParams({ owner, repo })
+    void fetch(`/api/classifications?${params}`)
+      .then(async (response) => {
+        const body = (await response.json()) as {
+          overrides?: ManualOverride[]
+          error?: string
+        }
+        if (!response.ok || !body.overrides) {
+          throw new Error(body.error ?? "Could not read your classifications.")
+        }
+        setOverrides(body.overrides)
+      })
+      .catch((cause) =>
+        setOverridesError(
+          `${cause instanceof Error ? cause.message : String(cause)} Files you previously re-classified are shown with the automatic verdict instead.`
+        )
+      )
+  }, [owner, repo, setOverrides])
 
   /**
    * Records what the user just took away.
@@ -158,6 +219,12 @@ export function RepoWorkspace({
                   {ledgerError} Nothing below is marked as used, so treat the
                   tree as unverified until this loads.
                 </AlertDescription>
+              </Alert>
+            )}
+            {overridesError && (
+              <Alert variant="destructive">
+                <AlertTitle>Your classifications are not in sync</AlertTitle>
+                <AlertDescription>{overridesError}</AlertDescription>
               </Alert>
             )}
             {isTruncated && (

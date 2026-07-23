@@ -399,7 +399,26 @@ Acceptance:
       the pinned tree is `source-gone`, a 429 throws so a rate limit is never mistaken for a
       deleted repository, and a deleted file or a hash mismatch is reported while the rest is
       still rebuilt. **Not exercised against real GitHub or a real database** — see below
-- [ ] **8 — Persisted classifications (migration 2).** Overrides survive refresh. NDA review
+- [x] **8 — Persisted classifications (migration 2).** A manual vendored/authored override is
+      now written to `Classification` and restored when the repository is opened, so it survives
+      a reload — slice 3 kept it in React state, where it died with the tab. The precedence
+      resolver is untouched: `lib/db/classifications.ts` is a port in the same shape as
+      `exports.ts` (client as a parameter, rules proven in `classifications.test.ts` against an
+      in-memory fake), `app/api/classifications/route.ts` is the second write path, and
+      `lib/classifications/payload.ts` guards it with the same Zod discipline as the first.
+      **Deviation: no `scope` column.** SPEC §3 gives the model three fields and
+      `ManualOverride` needs four, so a folder rule is stored with a trailing slash — the
+      gitignore convention `lib/vendored/glob.ts` already implements. Lossless, and no second
+      encoding of something the pattern language already expresses.
+      - [x] Migration 2 is its own folder, `20260723120100_add_classification/`, containing
+            `Classification` and nothing else — enforced by `prisma/migrations.test.ts`
+      - [x] The override survives a content change **by construction**: the row records no hash
+            and no size, and the key set is asserted so adding one fails the suite
+      - [x] A folder override still cascades to files listed after it was written
+      - [x] One user never sees another's overrides for the same public repository
+      - [ ] **[ext]** NDA review of migration 2 (`pg_dump`) — needs a database
+      - [ ] **[ext]** Exercise it in a browser against a real database: un-mark a file, reload,
+            confirm it is still authored. **Never run — no database is reachable**
 - [ ] **9 — Neon `TreeCache` tier (migration 3).** Head-SHA invalidation, manual Refresh, TTL
       backstop. Pure optimization — no acceptance criterion depends on it. NDA review
 - [ ] **10 — Settings + GDPR.** Repo-access link out to GitHub, full data export, account deletion.
