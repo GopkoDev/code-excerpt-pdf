@@ -1,17 +1,20 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { FileWarningIcon, FilesIcon, XIcon } from "lucide-react"
+import { FilesIcon, FileWarningIcon } from "lucide-react"
 
-import { FileDrop, type DroppedFile } from "@/components/local/file-drop"
+import { FileDrop } from "@/components/local/file-drop"
 import { DownloadButton } from "@/components/pdf/download-button"
+import { PageTotal } from "@/components/tree/page-total"
+import { TreeToolbar } from "@/components/tree/tree-toolbar"
+import { TreeView } from "@/components/tree/tree-view"
+import type { NodeCounts } from "@/components/tree/tree-node"
 import {
   Alert,
   AlertAction,
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -28,123 +31,244 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Separator } from "@/components/ui/separator"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { usePdfWorker } from "@/hooks/use-pdf-worker"
 import { decodeSourceFile } from "@/lib/files/decode"
+import { estimatePages, estimatePagesForSizes } from "@/lib/pdf/estimate"
 import { paginate, type MeasuredFile, type Metrics } from "@/lib/pdf/measure"
 import type { SourceFile } from "@/lib/pdf/render"
+import { createLocalSource, toLocalFiles } from "@/lib/sources/local"
+import { buildTree, flattenFiles } from "@/lib/tree/build"
+import {
+  deselectFolder,
+  selectFolder,
+  toggleFile,
+  type SelectionState,
+} from "@/lib/tree/selection"
+import type { ContentSource, FileEntry, TreeNode } from "@/lib/tree/types"
 
-type Accepted = SourceFile & { lines: number; titleLines: number }
+/** The dev-only estimate column exists to keep the byte estimator calibrated. */
+const SHOW_ESTIMATES = process.env.NODE_ENV === "development"
+
 type Rejected = { name: string; reason: string }
 
 export default function LocalPage() {
   const { send } = usePdfWorker()
 
-  const [accepted, setAccepted] = useState<Accepted[]>([])
-  const [rejected, setRejected] = useState<Rejected[]>([])
+  const [source, setSource] = useState<ContentSource | null>(null)
+  const [entries, setEntries] = useState<FileEntry[]>([])
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
+  const [measured, setMeasured] = useState<Map<string, MeasuredFile>>(new Map())
   const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [rejected, setRejected] = useState<Rejected[]>([])
+  const [notice, setNotice] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [lastExport, setLastExport] = useState<number | null>(null)
+  const [isMeasuring, setIsMeasuring] = useState(false)
 
-  const addFiles = useCallback(
-    async (dropped: DroppedFile[]) => {
+  const tree = useMemo(() => buildTree(entries), [entries])
+
+  const receiveFiles = useCallback(
+    (files: File[]) => {
       setError(null)
-      setLastExport(null)
-
-      const readable: SourceFile[] = []
-      const failures: Rejected[] = []
-
-      for (const file of dropped) {
-        const decoded = decodeSourceFile(file.bytes)
-        if (decoded.ok) {
-          readable.push({
-            name: file.name,
-            bytes: file.bytes,
-            text: decoded.text,
-          })
-        } else {
-          failures.push({ name: file.name, reason: decoded.reason })
-        }
-      }
-
-      setRejected((current) => [...current, ...failures])
-      if (readable.length === 0) return
-
-      try {
-        // Measuring needs pdfkit, so it happens once per file in the worker.
-        // The running total below is then pure arithmetic.
-        const response = await send({
-          type: "measure",
-          files: readable.map((f) => ({ name: f.name, text: f.text })),
-        })
-        if (response.type !== "measured")
-          throw new Error("Unexpected response.")
-
-        setMetrics(response.metrics)
-        setAccepted((current) => {
-          const byName = new Map(current.map((f) => [f.name, f]))
-          readable.forEach((file, index) =>
-            byName.set(file.name, {
-              ...file,
-              lines: response.files[index].codeLines,
-              titleLines: response.files[index].titleLines,
-            })
+      setNotice(null)
+      const local = toLocalFiles(files)
+      const next = createLocalSource(local)
+      setSource(next)
+      setSelected(new Set())
+      setMeasured(new Map())
+      // Font metrics are needed to label the tree at all, and they do not depend
+      // on any file. Fetch them up front, or every row would read "0p" until the
+      // first selection happened to load them.
+      void send({ type: "measure", files: [] }).then((response) => {
+        if (response.type === "measured") setMetrics(response.metrics)
+      })
+      void next.listFiles().then((listed) => {
+        setEntries(listed)
+        // Open the top level so a dropped folder is not a single closed row.
+        setExpanded(
+          new Set(
+            buildTree(listed)
+              .filter((node) => node.kind === "folder")
+              .map((node) => node.path)
           )
-          return [...byName.values()]
-        })
-      } catch (cause) {
-        setError(cause instanceof Error ? cause.message : String(cause))
-      }
+        )
+      })
     },
     [send]
   )
 
-  const ordered = useMemo(
-    () => [...accepted].sort((a, b) => (a.name < b.name ? -1 : 1)),
-    [accepted]
+  /**
+   * Exact counts need content, so they are fetched and measured only for files
+   * the user actually selected — and only once each. Everything already in
+   * `measured` is reused, which is what keeps toggling cheap.
+   */
+  const measureSelected = useCallback(
+    async (paths: ReadonlySet<string>) => {
+      if (!source) return
+      const missing = [...paths].filter((path) => !measured.has(path))
+      if (missing.length === 0) return
+
+      setIsMeasuring(true)
+      try {
+        const failures: Rejected[] = []
+        const readable: { path: string; name: string; text: string }[] = []
+
+        for (const path of missing) {
+          const bytes = await source.readFile(path)
+          const decoded = decodeSourceFile(bytes)
+          if (decoded.ok) {
+            readable.push({
+              path,
+              name: path.split("/").pop() ?? path,
+              text: decoded.text,
+            })
+          } else {
+            failures.push({ name: path, reason: decoded.reason })
+          }
+        }
+
+        if (failures.length > 0) {
+          setRejected((current) => [...current, ...failures])
+          setSelected((current) => {
+            const next = new Set(current)
+            failures.forEach((f) => next.delete(f.name))
+            return next
+          })
+        }
+
+        if (readable.length > 0) {
+          const response = await send({
+            type: "measure",
+            files: readable.map((f) => ({ name: f.name, text: f.text })),
+          })
+          if (response.type !== "measured")
+            throw new Error("Unexpected response.")
+
+          setMetrics(response.metrics)
+          setMeasured((current) => {
+            const next = new Map(current)
+            readable.forEach((file, index) =>
+              next.set(file.path, response.files[index])
+            )
+            return next
+          })
+        }
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : String(cause))
+      } finally {
+        setIsMeasuring(false)
+      }
+    },
+    [measured, send, source]
   )
 
-  /**
-   * The running total, recomputed from cached line counts on every change —
-   * no re-render of the PDF. It equals the exported page count exactly; that
-   * equality is what lib/pdf/measure.test.ts guards.
-   */
-  const totalPages = useMemo(() => {
-    if (!metrics || ordered.length === 0) return 0
-    const measured: MeasuredFile[] = ordered.map((file) => ({
-      name: file.name,
-      titleLines: file.titleLines,
-      codeLines: file.lines,
-    }))
-    return paginate(measured, metrics)
-  }, [ordered, metrics])
+  const applySelection = useCallback(
+    (next: Set<string>) => {
+      setSelected(next)
+      void measureSelected(next)
+    },
+    [measureSelected]
+  )
 
-  const remove = (name: string) =>
-    setAccepted((current) => current.filter((file) => file.name !== name))
+  const handleToggleSelect = useCallback(
+    (node: TreeNode, state: SelectionState) => {
+      if (node.kind === "file") {
+        applySelection(toggleFile(node.path, selected))
+        return
+      }
+      if (state === "all") {
+        setNotice(null)
+        applySelection(deselectFolder(node, selected))
+        return
+      }
+      const change = selectFolder(node, selected)
+      setNotice(
+        `Added ${change.added}, skipped ${change.skippedUsed} used, ${change.skippedVendored} vendored.`
+      )
+      applySelection(change.selected)
+    },
+    [applySelection, selected]
+  )
+
+  const selectedFiles = useMemo(
+    () => flattenFiles(tree).filter((file) => selected.has(file.path)),
+    [tree, selected]
+  )
+
+  /** Pure arithmetic over cached counts — never a re-render of the PDF. */
+  const totalPages = useMemo(() => {
+    if (!metrics || selectedFiles.length === 0) return 0
+    const files = selectedFiles
+      .map((file) => measured.get(file.path))
+      .filter((file): file is MeasuredFile => file !== undefined)
+    if (files.length === 0) return 0
+    return paginate(
+      [...files].sort((a, b) => (a.name < b.name ? -1 : 1)),
+      metrics
+    )
+  }, [selectedFiles, measured, metrics])
+
+  const countsFor = useCallback(
+    (node: TreeNode): NodeCounts => {
+      if (!metrics) return { estimated: 0 }
+      if (node.kind === "file") {
+        const exact = measured.get(node.path)
+        return {
+          estimated: estimatePages(node.entry.sizeBytes, metrics),
+          exact: exact ? paginate([exact], metrics) : undefined,
+        }
+      }
+      const sizes = flattenFiles(node.children).map((f) => f.entry.sizeBytes)
+      return { estimated: estimatePagesForSizes(sizes, metrics) }
+    },
+    [measured, metrics]
+  )
+
+  const toggleExpand = (path: string) =>
+    setExpanded((current) => {
+      const next = new Set(current)
+      if (!next.delete(path)) next.add(path)
+      return next
+    })
+
+  const allFolderPaths = useMemo(() => {
+    const walk = (nodes: TreeNode[]): string[] =>
+      nodes.flatMap((node) =>
+        node.kind === "folder" ? [node.path, ...walk(node.children)] : []
+      )
+    return walk(tree)
+  }, [tree])
+
+  const exportFiles = useCallback(async (): Promise<SourceFile[]> => {
+    if (!source) return []
+    return Promise.all(
+      selectedFiles.map(async (file) => {
+        const bytes = await source.readFile(file.path)
+        const decoded = decodeSourceFile(bytes)
+        return {
+          name: file.name,
+          bytes,
+          text: decoded.ok ? decoded.text : "",
+        }
+      })
+    )
+  }, [selectedFiles, source])
 
   return (
-    <main className="mx-auto flex max-w-3xl flex-col gap-6 p-8">
+    <main className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
       <div className="flex flex-col gap-2">
         <h1 className="text-2xl font-bold">Local export</h1>
         <p className="text-muted-foreground">
-          Drop source files, watch the page count, download a print-ready PDF.
-          No account, no upload.
+          Drop a folder, pick the files you want, watch the page count, download
+          a print-ready PDF. No account, no upload.
         </p>
       </div>
 
-      <FileDrop onFiles={addFiles} />
+      <FileDrop onFiles={receiveFiles} />
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Could not process those files</AlertTitle>
+          <AlertTitle>Something went wrong</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -172,80 +296,71 @@ export default function LocalPage() {
         </Alert>
       )}
 
+      {notice && (
+        <Alert>
+          <AlertTitle>Folder added</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+          <AlertAction>
+            <Button variant="ghost" size="sm" onClick={() => setNotice(null)}>
+              Dismiss
+            </Button>
+          </AlertAction>
+        </Alert>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Selection</CardTitle>
           <CardDescription>
-            Alphabetical, one continuous flow — exactly how it will print.
+            Exported alphabetically as one continuous flow.
           </CardDescription>
           <CardAction>
-            <Badge variant="secondary">
-              {totalPages} page{totalPages === 1 ? "" : "s"}
-            </Badge>
+            <PageTotal
+              pages={totalPages}
+              fileCount={selectedFiles.length}
+              isMeasuring={isMeasuring}
+            />
           </CardAction>
         </CardHeader>
 
         <CardContent className="flex flex-col gap-4">
-          {ordered.length === 0 ? (
+          {entries.length === 0 ? (
             <Empty>
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <FilesIcon />
                 </EmptyMedia>
-                <EmptyTitle>Nothing selected yet</EmptyTitle>
+                <EmptyTitle>Nothing loaded yet</EmptyTitle>
                 <EmptyDescription>
-                  Drop a few files above to see their page count.
+                  Drop files or choose a folder to browse it as a tree.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>File</TableHead>
-                  <TableHead className="text-right">Lines</TableHead>
-                  <TableHead className="w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ordered.map((file) => (
-                  <TableRow key={file.name}>
-                    <TableCell className="font-mono">{file.name}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {file.lines}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Remove ${file.name}`}
-                        onClick={() => remove(file.name)}
-                      >
-                        <XIcon />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <>
+              <TreeToolbar
+                selectedCount={selected.size}
+                onExpandAll={() => setExpanded(new Set(allFolderPaths))}
+                onCollapseAll={() => setExpanded(new Set())}
+                onClearSelection={() => setSelected(new Set())}
+              />
+              <TreeView
+                nodes={tree}
+                selected={selected}
+                expanded={expanded}
+                onToggleExpand={toggleExpand}
+                onToggleSelect={handleToggleSelect}
+                countsFor={countsFor}
+                showEstimates={SHOW_ESTIMATES}
+              />
+            </>
           )}
 
-          <Separator />
-
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-muted-foreground">
-              {lastExport === null
-                ? "The total above is what the PDF will contain."
-                : `Exported ${lastExport} page${lastExport === 1 ? "" : "s"}.`}
-            </p>
+          <div className="flex items-center justify-end">
             <DownloadButton
-              files={ordered.map(({ name, bytes, text }) => ({
-                name,
-                bytes,
-                text,
-              }))}
+              resolveFiles={exportFiles}
+              disabled={selectedFiles.length === 0}
               send={send}
-              onRendered={setLastExport}
               onError={setError}
             />
           </div>

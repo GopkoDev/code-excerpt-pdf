@@ -18,28 +18,31 @@ function saveBlob(blob: Blob, filename: string) {
 }
 
 export function DownloadButton({
-  files,
+  resolveFiles,
+  disabled,
   send,
-  onRendered,
   onError,
 }: {
-  files: SourceFile[]
+  /** Content is read lazily, at export time, for the selection only. */
+  resolveFiles: () => Promise<SourceFile[]>
+  disabled?: boolean
   send: (request: {
     type: "render"
     files: SourceFile[]
   }) => Promise<WorkerResponse>
-  onRendered: (pageCount: number) => void
   onError: (message: string) => void
 }) {
   const [isRendering, setIsRendering] = useState(false)
+  const [lastPageCount, setLastPageCount] = useState<number | null>(null)
 
   const download = async () => {
     setIsRendering(true)
     try {
+      const files = await resolveFiles()
       const response = await send({ type: "render", files })
       if (response.type !== "rendered") throw new Error("Unexpected response.")
       saveBlob(response.blob, "code-excerpt.pdf")
-      onRendered(response.pageCount)
+      setLastPageCount(response.pageCount)
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -48,13 +51,20 @@ export function DownloadButton({
   }
 
   return (
-    <Button disabled={files.length === 0 || isRendering} onClick={download}>
-      {isRendering ? (
-        <Spinner data-icon="inline-start" />
-      ) : (
-        <DownloadIcon data-icon="inline-start" />
+    <div className="flex items-center gap-3">
+      {lastPageCount !== null && !isRendering && (
+        <span className="text-sm text-muted-foreground">
+          Exported {lastPageCount} page{lastPageCount === 1 ? "" : "s"}.
+        </span>
       )}
-      {isRendering ? "Building PDF…" : "Download PDF"}
-    </Button>
+      <Button disabled={disabled || isRendering} onClick={download}>
+        {isRendering ? (
+          <Spinner data-icon="inline-start" />
+        ) : (
+          <DownloadIcon data-icon="inline-start" />
+        )}
+        {isRendering ? "Building PDF…" : "Download PDF"}
+      </Button>
+    </div>
   )
 }

@@ -113,27 +113,36 @@ Acceptance — all verified end to end in real headless Chrome over CDP:
 
 ## Slice 2 — Anonymous folder tree
 
-- [ ] `lib/tree/types.ts` — `FileEntry`, `ContentSource` (the seam that makes GitHub a swap of one
+- [x] `lib/tree/types.ts` — `FileEntry`, `ContentSource` (the seam that makes GitHub a swap of one
       implementation in slice 5)
-- [ ] `lib/tree/build.ts`, `lib/tree/selection.ts`, `lib/sources/local.ts` + tests
-- [ ] `lib/pdf/estimate.ts` + calibration test against the dropped folder as corpus
-- [ ] `npx shadcn@latest add checkbox collapsible badge scroll-area` (base-ui `Checkbox` has a
-      native `indeterminate` prop — that is the tri-state)
-- [ ] `components/tree/{tree-view,tree-node,tree-toolbar,page-total}.tsx`
-- [ ] Folder upload via `webkitdirectory`
-- [ ] **Render estimate _and_ exact side by side** (estimate in a dev-only column) — otherwise the
-      byte estimator ships to slice 5 uncalibrated
+- [x] `lib/tree/build.ts`, `lib/tree/selection.ts`, `lib/sources/local.ts` + tests
+- [x] `lib/pdf/estimate.ts` + calibration test against this repo's own source as corpus
+- [x] `npx shadcn@latest add checkbox collapsible scroll-area` (badge was already in). base-ui
+      `Checkbox` does have a native `indeterminate` prop — confirmed in its source that the
+      indicator renders when *checked OR indeterminate*, so the tri-state is a matter of which
+      glyph shows. `components/ui/checkbox.tsx` gained a `MinusIcon` for that
+- [x] `components/tree/{tree-view,tree-node,tree-toolbar,page-total}.tsx`
+- [x] Folder upload via `webkitdirectory` (set imperatively — there is no JSX prop for it)
+- [x] **Render estimate _and_ exact side by side** — `~N` dev-only column beside the badge, which
+      shows exact once measured and the estimate until then
 
-Acceptance:
+Acceptance — verified end to end in real headless Chrome over CDP:
 
-- [ ] Correct nested tree; folder nodes show aggregate estimate + available-vs-total counts
-- [ ] Tri-state checkbox: none / partial / all
-- [ ] Folder select reports "added N, skipped X used, Y vendored"
-- [ ] Running total updates on every toggle
-- [ ] **No target input field exists anywhere in the UI**
-- [ ] Estimator never under-estimates by more than one page across the corpus
+- [x] Correct nested tree; folder nodes show aggregate estimate + available-vs-total counts
+      (`proj 4/4 4p`, `docs 1/1 1p`, `src 3/3 3p`)
+- [x] Tri-state checkbox: selecting `src` left its parent `proj` **indeterminate** while `src`
+      itself read **checked**; unchecking one grandchild pushed both to indeterminate
+- [x] Folder select reports "Added 3, skipped 0 used, 0 vendored"
+- [x] Running total updates on every toggle (0 → 4 → 3)
+- [x] **No target input field exists anywhere in the UI** — the DOM holds exactly 2 file pickers
+      and 8 checkboxes, zero number or text inputs
+- [x] Estimator never under-estimates by more than one page across the corpus (`estimate.test.ts`)
+- [x] Running total still equals the exported PDF exactly: 3 shown, 3 `/Type /Page` objects, 3
+      reported
 
----
+**Bug found and fixed during verification:** every tree row showed `0p` until the first selection,
+because font metrics only arrived with the first measurement. They are now fetched up front, since
+they do not depend on any file.
 
 ## Slice 3 — Vendored detection
 

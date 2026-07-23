@@ -17,11 +17,17 @@ code-excerpt-pdf/
 ├── components/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
 │   ├── local/
-│   │   └── file-drop.tsx    # drag-and-drop / file-picker zone → raw bytes
+│   │   └── file-drop.tsx    # drop zone + file picker + webkitdirectory folder picker
+│   ├── tree/
+│   │   ├── tree-view.tsx    # scrollable root list
+│   │   ├── tree-node.tsx    # recursive row: tri-state checkbox, counts, estimate
+│   │   ├── tree-toolbar.tsx # expand / collapse / clear
+│   │   └── page-total.tsx   # running total — display only, NEVER a target input
 │   ├── pdf/
 │   │   ├── download-button.tsx  # asks the worker to render, saves the Blob
 │   │   └── render.worker.ts     # THE only place pdfkit runs (classic Worker)
-│   └── ui/                  # shadcn: button card empty alert badge table spinner separator
+│   └── ui/                  # shadcn: button card empty alert badge table spinner
+│                            #   separator checkbox collapsible scroll-area
 ├── hooks/
 │   └── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
 ├── lib/
@@ -90,6 +96,7 @@ code-excerpt-pdf/
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
+- **`components/ui/checkbox.tsx`** — the one shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when *checked OR indeterminate*, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
 - **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. It is the same render pipeline GitHub mode will use in slice 5.
 - **Testing** — Vitest, `node` environment, no jsdom (add it only when a slice actually needs a component test). Tests are co-located as `*.test.ts` next to the module they cover. Run with `npm test` / `npm run test:watch`.
 - **`scripts/`** — build-time Node scripts, plain `.mjs`, outside the Next.js graph.
