@@ -1,17 +1,25 @@
 /**
- * Whether the signed-in user has the App installed anywhere.
+ * Whether the signed-in user has the App installed anywhere, and where.
  *
  * Authentication and installation are separate steps for a GitHub App: a user
  * can sign in perfectly well and still have granted access to no repositories
  * at all. Treating that as an error would be wrong — they need routing to the
  * install page, not a failure.
+ *
+ * The request goes through `client.ts` like every other, so a revoked grant or
+ * an exhausted rate limit arrives as the same mapped `GitHubError` the route
+ * handlers already translate into a status — and there stays exactly one place
+ * that talks to api.github.com.
  */
 
-const GITHUB_API = "https://api.github.com"
+import { githubFetch } from "./client"
+import { parseInstallationsResponse } from "./repos"
 
 export type InstallationState = {
   hasInstallation: boolean
   installationCount: number
+  /** The repository list is per installation, so the ids are needed too. */
+  installationIds: number[]
 }
 
 export function installUrl(appSlug: string | undefined): string {
@@ -24,22 +32,13 @@ export function installUrl(appSlug: string | undefined): string {
 export async function fetchInstallationState(
   accessToken: string
 ): Promise<InstallationState> {
-  const response = await fetch(`${GITHUB_API}/user/installations`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${accessToken}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    // Installation state changes out of band, so never serve it from a cache.
-    cache: "no-store",
-  })
+  const parsed = parseInstallationsResponse(
+    await githubFetch("/user/installations", accessToken)
+  )
 
-  if (!response.ok) {
-    throw new Error(`GitHub /user/installations returned ${response.status}`)
+  return {
+    hasInstallation: parsed.totalCount > 0,
+    installationCount: parsed.totalCount,
+    installationIds: parsed.installationIds,
   }
-
-  const body = (await response.json()) as { total_count?: number }
-  const installationCount = body.total_count ?? 0
-
-  return { hasInstallation: installationCount > 0, installationCount }
 }
