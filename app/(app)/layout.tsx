@@ -5,7 +5,7 @@ import { auth } from "@/auth"
 import { SignInButton, SignOutButton } from "@/components/auth/auth-buttons"
 import { SiteFooter } from "@/components/site-footer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { ButtonLink } from "@/components/ui/button-link"
 
 /**
  * Shell for everything that is not marketing.
@@ -35,36 +35,24 @@ export default async function AppLayout({
           </Link>
 
           <nav className="flex items-center gap-1 text-sm">
-            <Button
-              variant="ghost"
-              size="sm"
-              render={<Link href="/projects" />}
-            >
+            <ButtonLink variant="ghost" size="sm" href="/projects">
               Repositories
-            </Button>
-            <Button variant="ghost" size="sm" render={<Link href="/local" />}>
+            </ButtonLink>
+            <ButtonLink variant="ghost" size="sm" href="/local">
               Local export
-            </Button>
+            </ButtonLink>
             {/* Only meaningful with an account — local export keeps no
                 history by design — so it is shown only when signed in. */}
             {session?.user && (
               <>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  render={<Link href="/exports" />}
-                >
+                <ButtonLink variant="ghost" size="sm" href="/exports">
                   Exports
-                </Button>
+                </ButtonLink>
                 {/* Same rule: there is nothing to export or erase without an
                     account, so the page only exists when there is one. */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  render={<Link href="/settings" />}
-                >
+                <ButtonLink variant="ghost" size="sm" href="/settings">
                   Settings
-                </Button>
+                </ButtonLink>
               </>
             )}
           </nav>

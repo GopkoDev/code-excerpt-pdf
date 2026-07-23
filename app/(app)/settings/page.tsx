@@ -10,7 +10,7 @@ import { deleteAccountAction } from "./actions"
 import { SignInButton } from "@/components/auth/auth-buttons"
 import { DeleteAccountDialog } from "@/components/settings/delete-account-dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import {
   Card,
   CardContent,
@@ -132,10 +132,17 @@ export default async function SettingsPage() {
           </p>
         </CardContent>
         <CardFooter>
-          <Button render={<a href="/api/account/export" download />}>
+          {/* A download, not a route — a styled <a> keeps link semantics
+              without routing through Base UI's button role. */}
+          <a
+            href="/api/account/export"
+            download
+            data-slot="button"
+            className={buttonVariants()}
+          >
             <DownloadIcon data-icon="inline-start" />
             Download my data
-          </Button>
+          </a>
         </CardFooter>
       </Card>
 

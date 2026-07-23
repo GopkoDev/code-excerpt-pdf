@@ -4,7 +4,7 @@ import { useEffect, useMemo } from "react"
 import { ExternalLinkIcon, XIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 
 /**
  * Inline preview of the exact document the download produces.
@@ -44,16 +44,18 @@ export function PdfPreview({
         </span>
 
         <div className="ml-auto flex items-center gap-1">
-          {
-            <Button
-              variant="ghost"
-              size="sm"
-              render={<a href={url} target="_blank" rel="noreferrer" />}
-            >
-              <ExternalLinkIcon data-icon="inline-start" />
-              Open in a tab
-            </Button>
-          }
+          {/* An external target, not a route — a styled <a> keeps link
+              semantics without Base UI's button role. */}
+          <a
+            href={url}
+            target="_blank"
+            rel="noreferrer"
+            data-slot="button"
+            className={buttonVariants({ variant: "ghost", size: "sm" })}
+          >
+            <ExternalLinkIcon data-icon="inline-start" />
+            Open in a tab
+          </a>
           <Button
             variant="ghost"
             size="icon"

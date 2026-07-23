@@ -3,7 +3,7 @@ import { FileTextIcon } from "lucide-react"
 
 import { SignInButton } from "@/components/auth/auth-buttons"
 import { SiteFooter } from "@/components/site-footer"
-import { Button } from "@/components/ui/button"
+import { ButtonLink } from "@/components/ui/button-link"
 
 /**
  * The public shell: landing, terms, privacy.
@@ -34,9 +34,9 @@ export default function MarketingLayout({
           </Link>
 
           <div className="ml-auto flex items-center gap-2">
-            <Button variant="ghost" size="sm" render={<Link href="/local" />}>
+            <ButtonLink variant="ghost" size="sm" href="/local">
               Local export
-            </Button>
+            </ButtonLink>
             <SignInButton variant="outline" redirectTo="/projects" />
           </div>
         </div>

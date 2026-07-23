@@ -94,6 +94,8 @@ code-excerpt-pdf/
 │   └── ui/                  # shadcn: button card empty alert badge table spinner
 │                            #   separator checkbox collapsible scroll-area switch
 │                            #   alert-dialog progress skeleton field input label
+│                            #   + button-link.tsx: a nav <a> styled with
+│                            #   buttonVariants, so a link stays role=link
 ├── hooks/
 │   ├── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
 │   ├── use-file-selection.ts # ALL state between a ContentSource and a PDF —
@@ -216,7 +218,10 @@ code-excerpt-pdf/
 │   │                        #   to govern. Never a source of truth.
 │   └── tasks/
 │       ├── plan.md          # build plan: findings, vertical slices, checkpoints
-│       └── todo.md          # actionable checklist, acceptance criteria per slice
+│       ├── todo.md          # actionable checklist, acceptance criteria per slice
+│       ├── ship-fixes-plan.md # follow-up plan from the /ship review (a11y +
+│       │                    #   doc/config truth-ups + coverage gaps)
+│       └── ship-fixes-todo.md # its checklist
 ├── AGENTS.md                # scaffold note: "this is not the Next.js you know"
 ├── CLAUDE.md                # primary guidance for Claude Code (read first)
 ├── README.md               # product vision, trilingual (EN/UA/PL)
@@ -246,10 +251,10 @@ code-excerpt-pdf/
 - **`lib/db/` + `lib/exports/` + `lib/classifications/`** — persistence, kept deliberately thin. `exports.ts` and `classifications.ts` are _ports_: each receives the Prisma client as a parameter, so every rule they encode (a repo row is reused, one `UsedFile` per file, one rule per path, a ledger never crosses users) is proven against an in-memory fake with no database anywhere. `exports-db.ts` and `classifications-db.ts` are the only adapters that hand them the real client. Nothing else in the app imports Prisma. Both share `UsersDb`, because `User` is identity and belongs to neither.
 - **`app/(app)/settings/` + `lib/db/account.ts`** — the GDPR pair. `exportAccountData` hands over every row the service holds; `deleteAccount` erases them. Both iterate `ACCOUNT_MODELS`, the written-down inventory of persisted models, which `lib/db/account.test.ts` compares against `prisma/schema.prisma` itself — so a seventh model fails the suite rather than falling silently out of a subject-access request. Built last for exactly that reason: enumerating a schema that is still growing is how a table ends up outside the export.
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
-- **`components/ui/button.tsx`** — local edit: Base UI defaults `nativeButton` to true, so every `render={<Link />}` / `render={<a />}` both warned and silently dropped native button semantics (an anchor styled as a button announced itself as a link). The wrapper now derives `nativeButton` from the rendered element, so call sites need not remember. An explicit `nativeButton` still wins, and a render _function_ is left to Base UI's default. Covered by `components/ui/button.test.tsx`.
+- **`components/ui/button.tsx`** — the plain generated shadcn component; no local edit. Button-styled **navigation** does NOT go through it: Base UI stamps `role="button"` onto an anchor rendered as a button, which strips the link semantics from a control that navigates to a URL (WCAG 4.1.2). Use **`components/ui/button-link.tsx`** — a `next/link` wearing `buttonVariants` — for routes, or apply `buttonVariants()` to a plain `<a>` for a download/external target (the two non-route anchors, in `settings/page.tsx` and `pdf-preview.tsx`). `Button`'s `render` prop stays for genuine button-like uses (e.g. `alert-dialog.tsx`). Covered by `button.test.tsx` and `button-link.test.tsx`.
 - **`components/ui/checkbox.tsx`** — a shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when _checked OR indeterminate_, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
 - **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. The page itself is now only the drop zone plus `SelectionPanel`; everything else lives in `useFileSelection`, which GitHub mode drives identically.
-- **Testing** — Vitest, `node` environment by default. A file that needs a DOM opts in per-file with a `// @vitest-environment jsdom` docblock (only `hooks/use-file-selection.test.ts` does), which keeps the pdfkit suites in `node` and needs no config split. `renderHook` comes from `@testing-library/react`; hook tests need no JSX, so everything stays `*.test.ts` and the include pattern is unchanged. Tests are co-located next to the module they cover. Run with `npm test` / `npm run test:watch`.
+- **Testing** — Vitest, `node` environment by default. A file that needs a DOM opts in per-file with a `// @vitest-environment jsdom` docblock, which keeps the pdfkit suites in `node` and needs no config split. The include pattern covers **`*.test.ts` + `*.test.tsx`** (`vitest.config.ts`): hook tests (`use-file-selection.test.ts`) use `renderHook` from `@testing-library/react` and need no JSX, while component tests (`button.test.tsx`, `button-link.test.tsx`) are `.tsx` under jsdom. Tests are co-located next to the module they cover. Run with `npm test` / `npm run test:watch`.
 - **`scripts/`** — build-time Node scripts, plain `.mjs`, outside the Next.js graph.
 - **`.claude/`** — Claude Code config and docs. `settings.json` is team-shared (committed); `settings.local.json` is personal and gitignored. Skills are consumed here via the symlink into `.agents/`.
 - **`.agents/skills/`** — cross-agent skill store created by the `skills` CLI. Real skill files live here; `.claude/skills/*` are symlinks into it. Only `shadcn` remains (the agent-skills pack was moved to a plugin in `settings.local.json`).

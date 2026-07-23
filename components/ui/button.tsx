@@ -1,4 +1,3 @@
-import { isValidElement } from "react"
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -41,36 +40,16 @@ const buttonVariants = cva(
   }
 )
 
-/**
- * Local edit to the generated component (see .claude/ARCHITECTURE.md).
- *
- * Base UI defaults `nativeButton` to true, meaning "the `render` prop produces
- * a real `<button>`". This app renders `Button` as a `Link` or an `<a>` in a
- * dozen places — the whole app-shell nav, the repo list, the export download —
- * and each one both logged an error and silently lost native button semantics,
- * so an anchor styled as a button announced itself as a link.
- *
- * Deriving it here rather than at every call site means the next
- * `render={<Link />}` is right by default instead of being the next bug. Only
- * an element can be inspected; a render *function* is left to Base UI's own
- * default, and an explicit `nativeButton` always wins.
- */
 function Button({
   className,
   variant = "default",
   size = "default",
-  render,
-  nativeButton,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
-  const rendersNonButton = isValidElement(render) && render.type !== "button"
-
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
-      render={render}
-      nativeButton={nativeButton ?? (rendersNonButton ? false : undefined)}
       {...props}
     />
   )

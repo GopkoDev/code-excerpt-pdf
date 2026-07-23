@@ -1,13 +1,13 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import Link from "next/link"
 import { ChevronLeftIcon, RefreshCwIcon, ScissorsIcon } from "lucide-react"
 
 import { RepoStats } from "@/components/projects/repo-stats"
 import { SelectionPanel } from "@/components/selection/selection-panel"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { ButtonLink } from "@/components/ui/button-link"
 import { useFileSelection } from "@/hooks/use-file-selection"
 import { githubApiFetch } from "@/lib/github/refreshing-fetch"
 import type { RenderResult } from "@/lib/pdf/render"
@@ -207,15 +207,15 @@ export function RepoWorkspace({
   return (
     <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-8">
       <div className="flex flex-col gap-2">
-        <Button
+        <ButtonLink
           variant="ghost"
           size="sm"
           className="self-start"
-          render={<Link href="/projects" />}
+          href="/projects"
         >
           <ChevronLeftIcon data-icon="inline-start" />
           All repositories
-        </Button>
+        </ButtonLink>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="font-mono text-2xl font-bold">
             {owner}/{repo}

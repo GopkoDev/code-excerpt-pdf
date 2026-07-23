@@ -14,18 +14,15 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
 
 ## Phase 1 — The accessibility blocker
 
-- [ ] **Task 1 [blocker]** — Add `ButtonLink` (next/link + `buttonVariants`), migrate
-      the 9 anchor call sites off `Button render=`, revert `components/ui/button.tsx`
-      to the generated shadcn shape. Removes the `role="button"`-on-anchors
-      regression (cr) and deletes the component-element edge case (te #6) by
-      removing the mechanism. Sites: `app/(app)/layout.tsx:41,45,55,64`,
-      `app/(app)/settings/page.tsx:135` (raw `<a download>`),
-      `app/(marketing)/layout.tsx:37`, `app/(marketing)/page.tsx:66,158`,
-      `components/projects/repo-workspace.tsx:214`,
-      `components/pdf/pdf-preview.tsx:51` (raw `<a target=_blank>`). Leave
-      `alert-dialog.tsx:168`.
-- [ ] **Task 2** — Rewrite `button.test.tsx` to assert nav anchors are `role="link"`,
-      not `role="button"`; add `button-link.test.tsx` (href + variant/size classes).
+- [x] **Task 1 [blocker]** — Added `ButtonLink` (next/link + `buttonVariants`),
+      migrated all 9 anchor call sites off `Button render=`, reverted
+      `components/ui/button.tsx` to the generated shadcn shape. Removes the
+      `role="button"`-on-anchors regression (cr) and deletes the component-element
+      edge case (te #6) by removing the mechanism. `grep render={<` now returns
+      only `alert-dialog.tsx`.
+- [x] **Task 2** — Rewrote `button.test.tsx` to cover only real-button behaviour;
+      added `button-link.test.tsx` (role=link, not role=button; href;
+      variant/size classes; className merge). Suite 387 green.
 
 ### ▸ Checkpoint A — the regression is gone
 
@@ -40,10 +37,11 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
 
 - [ ] **Task 3** — Correct the stale header in `lib/github/errors.ts:5-6` (a
       budget-remaining 403 is NOT a burst limit). (cr)
-- [ ] **Task 4** — Fix the self-contradicting Testing note in
-      `.claude/ARCHITECTURE.md` (include pattern IS `*.test.ts` + `*.test.tsx`),
-      add `button.test.tsx` to the tree, drop the obsolete `button.tsx` local-edit
-      bullet. (cr)
+- [x] **Task 4** — Fixed the self-contradicting Testing note in
+      `.claude/ARCHITECTURE.md` (include pattern IS `*.test.ts` + `*.test.tsx`) and
+      dropped the obsolete `button.tsx` local-edit bullet. _(Folded into Task 1's
+      commit — the doc-accuracy gate required reflecting the reverted `button.tsx`
+      and the new `button-link` files in the same commit.)_
 - [ ] **Task 5** — Add `@testing-library/dom` to `devDependencies` (sec, cr); fix the
       "340 → 387" count in `docs/notes/2026-07-23-…` (real total 386). (te)
 

@@ -1,4 +1,3 @@
-import Link from "next/link"
 import type { Metadata } from "next"
 import {
   CopyXIcon,
@@ -12,7 +11,7 @@ import {
 
 import { SignInButton } from "@/components/auth/auth-buttons"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { ButtonLink } from "@/components/ui/button-link"
 import {
   Card,
   CardDescription,
@@ -63,9 +62,9 @@ export default function LandingPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           <SignInButton label="Sign in with GitHub" redirectTo="/projects" />
-          <Button variant="outline" size="sm" render={<Link href="/local" />}>
+          <ButtonLink variant="outline" size="sm" href="/local">
             Try it with no account
-          </Button>
+          </ButtonLink>
         </div>
 
         <p className="text-sm text-muted-foreground">
@@ -155,9 +154,9 @@ export default function LandingPage() {
             label="Get started with GitHub"
             redirectTo="/projects"
           />
-          <Button variant="ghost" size="sm" render={<Link href="/local" />}>
+          <ButtonLink variant="ghost" size="sm" href="/local">
             Or export a local folder
-          </Button>
+          </ButtonLink>
         </div>
       </section>
     </main>
