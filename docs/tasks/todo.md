@@ -119,7 +119,7 @@ Acceptance — all verified end to end in real headless Chrome over CDP:
 - [x] `lib/pdf/estimate.ts` + calibration test against this repo's own source as corpus
 - [x] `npx shadcn@latest add checkbox collapsible scroll-area` (badge was already in). base-ui
       `Checkbox` does have a native `indeterminate` prop — confirmed in its source that the
-      indicator renders when *checked OR indeterminate*, so the tri-state is a matter of which
+      indicator renders when _checked OR indeterminate_, so the tri-state is a matter of which
       glyph shows. `components/ui/checkbox.tsx` gained a `MinusIcon` for that
 - [x] `components/tree/{tree-view,tree-node,tree-toolbar,page-total}.tsx`
 - [x] Folder upload via `webkitdirectory` (set imperatively — there is no JSX prop for it)
@@ -162,6 +162,7 @@ This matters less than it first appears: the estimate never feeds the running to
 computed from exact measurements of the selected files — in GitHub mode too, since selecting a
 file is what fetches its blob. A bad estimate shows up as a surprising jump on selection, not a
 short export.
+
 - [x] Running total still equals the exported PDF exactly: 3 shown, 3 `/Type /Page` objects, 3
       reported
 
@@ -236,7 +237,6 @@ Acceptance — verified in real headless Chrome:
 > headless Chrome — signed out, and signed in against a synthetic session cookie with the
 > GitHub API intercepted. What still needs real credentials is the OAuth round trip itself.
 
-
 Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a real deploy.
 
 - [ ] `auth.ts` (Auth.js v5, JWT strategy, **no adapter**), `app/api/auth/[...nextauth]/route.ts`
@@ -288,13 +288,12 @@ Acceptance:
 > proves the page and the call pattern; it does not prove the OAuth round trip or GitHub's real
 > response shapes beyond what the Zod schemas assert.
 
-
 - [x] `lib/github/{client,tree,blob,errors,concurrency}.ts`
 - [x] `app/api/github/{tree,blob}/route.ts` — **all GitHub access lives here, never in RSC**
 - [x] Zod schemas for the Trees response (first untrusted JSON), and for the repositories one
 - [x] `lib/sources/github.ts` implementing `ContentSource`, plus `lib/sources/github-cache.ts`.
       **Deviation: no React Query.** The source already caches the tree and every blob; the only
-      gap was that a remount built a *new* source, which a module-scoped map fixes in ten lines.
+      gap was that a remount built a _new_ source, which a module-scoped map fixes in ten lines.
       A query library would have been a second cache holding the same truth
 - [x] `lib/github/refreshing-fetch.ts` — the client half of the `401 token-expired` contract:
       refresh through the one route allowed to, retry once, single-flight so parallel blob reads
@@ -328,7 +327,6 @@ Acceptance:
 > listed under "What is still owed" at the end of this slice — read it before calling slice 6
 > done. Note the plan expected `migrations.url` in `prisma.config.ts`; Prisma 7.9 actually takes
 > `datasource.url` — verified against the installed types.
-
 
 - [x] `prisma/schema.prisma` — **only** `User`, `Repo`, `Export`, `UsedFile`. **Deviation:
       `Repo.githubRepoId` is not stored** and `Repo` is keyed on `(userId, owner, name)`; the
@@ -409,16 +407,10 @@ Acceptance:
       **Deviation: no `scope` column.** SPEC §3 gives the model three fields and
       `ManualOverride` needs four, so a folder rule is stored with a trailing slash — the
       gitignore convention `lib/vendored/glob.ts` already implements. Lossless, and no second
-      encoding of something the pattern language already expresses.
-      - [x] Migration 2 is its own folder, `20260723120100_add_classification/`, containing
-            `Classification` and nothing else — enforced by `prisma/migrations.test.ts`
-      - [x] The override survives a content change **by construction**: the row records no hash
-            and no size, and the key set is asserted so adding one fails the suite
-      - [x] A folder override still cascades to files listed after it was written
-      - [x] One user never sees another's overrides for the same public repository
-      - [ ] **[ext]** NDA review of migration 2 (`pg_dump`) — needs a database
-      - [ ] **[ext]** Exercise it in a browser against a real database: un-mark a file, reload,
-            confirm it is still authored. **Never run — no database is reachable**
+      encoding of something the pattern language already expresses. - [x] Migration 2 is its own folder, `20260723120100_add_classification/`, containing
+      `Classification` and nothing else — enforced by `prisma/migrations.test.ts` - [x] The override survives a content change **by construction**: the row records no hash
+      and no size, and the key set is asserted so adding one fails the suite - [x] A folder override still cascades to files listed after it was written - [x] One user never sees another's overrides for the same public repository - [ ] **[ext]** NDA review of migration 2 (`pg_dump`) — needs a database - [ ] **[ext]** Exercise it in a browser against a real database: un-mark a file, reload,
+      confirm it is still authored. **Never run — no database is reachable**
 - [x] **9 — Neon `TreeCache` tier (migration 3).** `app/api/github/tree/route.ts` answers from
       `TreeCache` when it can and calls GitHub when it cannot, so a cold start paints from the
       database instead of waiting on the Trees API. `lib/db/tree-cache.ts` is the port (same
@@ -426,28 +418,39 @@ Acceptance:
       drives that from a Refresh button on the repository page. **The source seam was not
       widened**: `refresh()`/`isCached()` sit beside `isTruncated()`/`headSha()` as GitHub-only
       extras, because anonymous mode has nothing to refresh and `ContentSource` is what keeps
-      the two modes from drifting.
-      - [x] Migration 3 is its own folder, `20260723120200_add_tree_cache/`, containing
-            `TreeCache` and nothing else — enforced by `prisma/migrations.test.ts`
-      - [x] `tree` carries path, size and blob SHA only. The Zod schema is applied on the way
-            **in** as well as out, so a `ParsedTree` that grew a content field upstream could
-            not reach the column; asserted by key set in `tree-cache.test.ts`
-      - [x] Invalidation keyed on `{repoId}@{headSha}` — a moved head replaces the row rather
-            than accumulating one per revision
-      - [x] TTL backstop (15 min), because a hit is served **without** asking GitHub for the
-            current head SHA — which is the entire saving, and the only thing that could
-            otherwise bound staleness
-      - [x] Every failure path is soft: a missing, slow or unreadable row costs one Trees call
-      - [x] A request pinned to a commit SHA (`regenerate.ts`) is neither served from nor
-            written to the cache
-      - [ ] **[ext]** NDA review of migration 3 (`pg_dump`) — needs a database
-      - [ ] **[ext]** Verify the cold-start hit in a browser against a real database: open a
-            repo, restart the server, confirm the second open issues **zero** Trees calls and
-            that Refresh issues exactly one. **Never run — no database is reachable**
-      - [ ] Note the new fact for Checkpoint E: caching a listing creates the `Repo` row, so
-            the database now records which repositories were *opened*, not only exported from
-- [ ] **10 — Settings + GDPR.** Repo-access link out to GitHub, full data export, account deletion.
-      **Must be last** — it enumerates the final schema
+      the two modes from drifting. - [x] Migration 3 is its own folder, `20260723120200_add_tree_cache/`, containing
+      `TreeCache` and nothing else — enforced by `prisma/migrations.test.ts` - [x] `tree` carries path, size and blob SHA only. The Zod schema is applied on the way
+      **in** as well as out, so a `ParsedTree` that grew a content field upstream could
+      not reach the column; asserted by key set in `tree-cache.test.ts` - [x] Invalidation keyed on `{repoId}@{headSha}` — a moved head replaces the row rather
+      than accumulating one per revision - [x] TTL backstop (15 min), because a hit is served **without** asking GitHub for the
+      current head SHA — which is the entire saving, and the only thing that could
+      otherwise bound staleness - [x] Every failure path is soft: a missing, slow or unreadable row costs one Trees call - [x] A request pinned to a commit SHA (`regenerate.ts`) is neither served from nor
+      written to the cache - [ ] **[ext]** NDA review of migration 3 (`pg_dump`) — needs a database - [ ] **[ext]** Verify the cold-start hit in a browser against a real database: open a
+      repo, restart the server, confirm the second open issues **zero** Trees calls and
+      that Refresh issues exactly one. **Never run — no database is reachable** - [ ] Note the new fact for Checkpoint E: caching a listing creates the `Repo` row, so
+      the database now records which repositories were _opened_, not only exported from
+- [x] **10 — Settings + GDPR.** `app/(app)/settings/` carries three things: a link out to
+      GitHub for repository access (only GitHub can change it — the app has no way to grant
+      itself a repository), a full data export, and account deletion. `lib/db/account.ts` is the
+      port, in the same shape as the other three, so both operations are proven against an
+      in-memory fake with no database. **Built last as planned**: it is the page that has to
+      enumerate the final schema, and the schema is now the six models SPEC §3 names - [x] The export covers **all six models** — and it is pinned to `prisma/schema.prisma`
+      rather than to a list someone must remember to update. `account.test.ts` parses the
+      schema for its models _and each model's columns_; adding a seventh model fails eight
+      tests, adding a column to an existing model fails one. Verified by temporarily
+      adding a `Bookmark` model and a `User.nickname` column and watching them fail - [x] The export contains no source code and no token. `TreeCache.tree` is the only Json
+      column, so it is re-validated on the way **out** through the same Zod schema that
+      guarded it on the way in; the test plants a `content` field in a cached row and
+      asserts it cannot come back out, then deep-scans the payload for content-shaped
+      keys and token-shaped values - [x] Deletion reaches every model, proven against a fake that implements **no** cascade
+      — the foreign keys declare `onDelete: Cascade`, but no migration has ever been
+      applied, so the cascade has never been observed. Deletes are explicit, children
+      before parents, idempotent, and counted per model - [x] Deletion is confirmed by typing the account's own login, enforced **server-side**
+      in `lib/account/payload.ts`; the dialog's disabled button is a hint, not the rule - [x] Deleting signs the user out in the same step — a JWT still naming a deleted account
+      would keep them browsing as a ghost, and the next export would upsert the row back - [x] **No schema change and no new migration** — the six models were already there, so
+      `prisma/migrations.test.ts` still sees three one-concern migrations - [ ] **[ext]** Exercise the export **and** the delete on a real account. **Never run —
+      no database is reachable.** Nothing in this slice has executed a query - [ ] **[ext]** Confirm the downloaded file's `Content-Disposition` actually saves as a
+      file in a browser, and that the deletion redirect lands signed out on `/`
 - [ ] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on
 
 > **Slices 6 and 7 were built with no database reachable.** Migration 1 has never been applied,
@@ -461,7 +464,14 @@ Acceptance:
 ## ▸ CHECKPOINT E — pre-launch
 
 - [ ] `pg_dump` inspection against the final schema
-- [ ] Exercise GDPR export **and** delete on a real account
+- [ ] Exercise GDPR export **and** delete on a real account. What slice 10 could **not**
+      prove, because no database is reachable: - [ ] The deletion actually removes the rows in Postgres, not just in the fake — take a
+      `pg_dump` before and after and diff it. The port's completeness is proven; its
+      effect on a real database is not - [ ] `signOut` inside the Server Action really clears the cookie and redirects (Auth.js
+      allows cookie writes there, but this path has never run) - [ ] A `TreeCache.tree` written by the real cache writer round-trips through the export
+      unchanged — the test uses a hand-built row - [ ] Nothing outside the schema holds personal data: check hosting logs, Vercel
+      analytics, and any Neon backup or point-in-time-recovery window, which a database
+      deletion does **not** reach and which a GDPR answer must account for
 - [ ] ToS and privacy live
 - [ ] Rate-limit behaviour verified on a large repo
 - [ ] Only then: put the public-instance link in the repo description

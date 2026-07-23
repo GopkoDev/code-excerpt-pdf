@@ -54,12 +54,17 @@ const CachedFile = z.object({
   blobSha: z.string(),
 })
 
-const CachedTree = z.object({
+/**
+ * Exported because the GDPR export reads this column too, and a subject-access
+ * request must not become the one path that hands the raw Json back out. See
+ * `lib/db/account.ts`.
+ */
+export const CachedTree = z.object({
   truncated: z.boolean(),
   files: z.array(CachedFile),
 })
 
-type CachedTree = z.infer<typeof CachedTree>
+export type CachedTree = z.infer<typeof CachedTree>
 
 export type TreeCacheDb = UsersDb & {
   repo: ExportsDb["repo"] & {

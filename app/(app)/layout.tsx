@@ -34,7 +34,11 @@ export default async function AppLayout({
           </Link>
 
           <nav className="flex items-center gap-1 text-sm">
-            <Button variant="ghost" size="sm" render={<Link href="/projects" />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              render={<Link href="/projects" />}
+            >
               Repositories
             </Button>
             <Button variant="ghost" size="sm" render={<Link href="/local" />}>
@@ -43,13 +47,24 @@ export default async function AppLayout({
             {/* Only meaningful with an account — local export keeps no
                 history by design — so it is shown only when signed in. */}
             {session?.user && (
-              <Button
-                variant="ghost"
-                size="sm"
-                render={<Link href="/exports" />}
-              >
-                Exports
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/exports" />}
+                >
+                  Exports
+                </Button>
+                {/* Same rule: there is nothing to export or erase without an
+                    account, so the page only exists when there is one. */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  render={<Link href="/settings" />}
+                >
+                  Settings
+                </Button>
+              </>
             )}
           </nav>
 
