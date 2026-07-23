@@ -13,7 +13,12 @@ code-excerpt-pdf/
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
 │   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
-│   └── (app)/local/page.tsx # anonymous export: drop files, running total, download
+│   ├── (app)/local/page.tsx # anonymous export: drop files, running total, download
+│   └── api/
+│       ├── auth/[...nextauth]/route.ts  # Auth.js handlers
+│       └── github/
+│           ├── refresh/route.ts  # THE ONLY place a token is refreshed
+│           └── setup/route.ts    # GitHub App Setup URL — idempotent
 ├── components/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
 │   ├── local/
@@ -35,6 +40,9 @@ code-excerpt-pdf/
 ├── lib/
 │   ├── utils.ts             # cn() — clsx + tailwind-merge class combiner
 │   ├── utils.test.ts        # cn() unit test; also GUARDS that `@/*` resolves under Vitest
+│   ├── github/
+│   │   ├── refresh-lock.ts  # in-flight map — stops parallel refreshes racing
+│   │   └── installation.ts  # /user/installations → has the App been installed?
 │   ├── files/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
 │   ├── uniqueness/
@@ -126,6 +134,8 @@ code-excerpt-pdf/
 - **A folder showing `~33p` before selection and `28p` after is correct, not a bug — do not "fix" it by measuring eagerly.** Exact counts need file content. Anonymous mode has it, but GitHub mode does not: fetching every blob just to label a tree is the API spend the two-tier design exists to avoid. Measuring everything up front in anonymous mode would also stop exercising the byte estimator on the main path, which is the only thing keeping it calibrated for GitHub mode. The estimate stays, and the `~` prefix is what makes it honest. Decision confirmed with the user 2026-07-23.
 - **A file that fails to decode must get `status: "unsupported"`, not just be deselected.** A listing knows only names and sizes, so a binary like `.DS_Store` is `available` until something reads it. If it stays `available` after failing, the next bulk select re-adds it, it fails again, and its folder can never reach "all" — it sits indeterminate and re-reports the same error on every click. `lib/tree/selection.ts` skips the status and counts it separately.
 - **Vendored status is derived on every render, never stored on the entry.** An override has to be able to flip it back, and a folder rule has to reach files listed later. Only `unsupported` is sticky, because it records something discovered by actually reading the file.
+- **The access token must never reach the `Session` object.** `/api/auth/session` is readable by the browser, so anything on the session is public to the page. Route handlers read the raw JWT with `getToken()` instead. SPEC's "no token in any log or RSC payload" depends on this.
+- **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
 - **Preview and download share one render**, keyed by `selectionSignature()`. Rendering separately would produce two page counts free to disagree — the drift the single-run rule exists to prevent. A browser check asserts the download saves the identical `Blob` *object* the preview displayed.
 - `renderPdf()` returns the page count of the run that produced the bytes. Never compute `actualPages` from a second render; the recorded number would be free to drift from the PDF the user downloaded.
