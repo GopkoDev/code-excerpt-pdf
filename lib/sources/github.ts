@@ -17,7 +17,10 @@ export type RepoRef = { owner: string; repo: string; ref?: string }
 export function createGitHubSource(
   { owner, repo, ref }: RepoRef,
   options: { fetcher?: typeof fetch } = {}
-): ContentSource & { isTruncated: () => boolean } {
+): ContentSource & {
+  isTruncated: () => boolean
+  headSha: () => string | null
+} {
   const request = options.fetcher ?? fetch
 
   // One Trees call per repo, held for the session: SPEC requires that
@@ -26,6 +29,7 @@ export function createGitHubSource(
   const blobShas = new Map<string, string>()
   const contents = new Map<string, Uint8Array>()
   let truncated = false
+  let headSha: string | null = null
 
   async function loadTree(): Promise<ParsedTree> {
     if (treePromise) return treePromise
@@ -41,6 +45,7 @@ export function createGitHubSource(
       }
 
       truncated = body.truncated
+      headSha = body.headSha
       body.files.forEach((file) => blobShas.set(file.path, file.blobSha))
       return body
     })()
@@ -96,5 +101,14 @@ export function createGitHubSource(
 
     /** True when the repo exceeded the Trees API limit. Surface it. */
     isTruncated: () => truncated,
+
+    /**
+     * The revision this listing came from, once it has been listed.
+     *
+     * Recorded against every exported file, so a past export can be rebuilt by
+     * re-fetching rather than by storing what it contained. `null` until the
+     * tree has loaded — there is no revision to pin before then.
+     */
+    headSha: () => headSha,
   }
 }

@@ -1,9 +1,11 @@
 "use client"
 
 import {
+  CheckCheckIcon,
   ChevronRightIcon,
   FileIcon,
   FolderIcon,
+  HistoryIcon,
   PackageIcon,
 } from "lucide-react"
 
@@ -123,6 +125,33 @@ export function TreeNode(props: TreeNodeProps) {
           <Badge variant="outline" title={verdict.reason} className="shrink-0">
             <PackageIcon />
             vendored
+          </Badge>
+        )}
+
+        {/*
+          Marked, never hidden and never disabled. SPEC forbids a used file
+          silently re-entering a listing, not the user deciding to include it —
+          the checkbox still works, and picking one warns first.
+        */}
+        {node.kind === "file" && node.entry.status === "used" && (
+          <Badge
+            variant="outline"
+            title="Already exported, and the content has not changed since"
+            className="shrink-0"
+          >
+            <CheckCheckIcon />
+            used
+          </Badge>
+        )}
+
+        {node.kind === "file" && node.entry.status === "used-but-changed" && (
+          <Badge
+            variant="secondary"
+            title="Already exported, but the content has changed since — part of it is genuinely new"
+            className="shrink-0"
+          >
+            <HistoryIcon />
+            used · changed
           </Badge>
         )}
 

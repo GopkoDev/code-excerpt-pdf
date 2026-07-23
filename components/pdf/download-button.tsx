@@ -20,6 +20,7 @@ export function DownloadButton({
   render,
   disabled,
   onError,
+  onExported,
 }: {
   /**
    * Produces the document — served from the shared render cache, so the bytes
@@ -28,6 +29,14 @@ export function DownloadButton({
   render: () => Promise<RenderResult>
   disabled?: boolean
   onError: (message: string) => void
+  /**
+   * Runs *after* the bytes are saved, never before.
+   *
+   * The ledger records what the user actually took away, so recording an
+   * export that then failed to download would lock files out of every future
+   * listing for a PDF nobody has.
+   */
+  onExported?: (result: RenderResult) => void | Promise<void>
 }) {
   const [isRendering, setIsRendering] = useState(false)
   const [lastPageCount, setLastPageCount] = useState<number | null>(null)
@@ -38,6 +47,7 @@ export function DownloadButton({
       const result = await render()
       saveBlob(result.blob, "code-excerpt.pdf")
       setLastPageCount(result.pageCount)
+      await onExported?.(result)
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
     } finally {

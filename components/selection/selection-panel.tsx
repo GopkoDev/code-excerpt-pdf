@@ -8,7 +8,7 @@ import { PdfPreview } from "@/components/pdf/pdf-preview"
 import { PageTotal } from "@/components/tree/page-total"
 import { TreeToolbar } from "@/components/tree/tree-toolbar"
 import { TreeView } from "@/components/tree/tree-view"
-import { VendoredWarning } from "@/components/tree/vendored-warning"
+import { SelectionWarning } from "@/components/tree/selection-warning"
 import {
   Alert,
   AlertAction,
@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/empty"
 import { Spinner } from "@/components/ui/spinner"
 import type { FileSelection } from "@/hooks/use-file-selection"
+import type { RenderResult } from "@/lib/pdf/render"
 
 /** The dev-only estimate column exists to keep the byte estimator calibrated. */
 const SHOW_ESTIMATES = process.env.NODE_ENV === "development"
@@ -50,12 +51,22 @@ export function SelectionPanel({
   emptyTitle,
   emptyDescription,
   banner,
+  onExported,
 }: {
   selection: FileSelection
   emptyTitle: string
   emptyDescription: string
   /** Source-specific context, e.g. a truncated-tree warning. */
   banner?: ReactNode
+  /**
+   * Called once the user has actually saved a PDF, with the page count of the
+   * run that produced those bytes.
+   *
+   * Optional because anonymous mode persists nothing — that is the whole point
+   * of it — so the panel stays source-agnostic and GitHub mode supplies the
+   * recording.
+   */
+  onExported?: (result: RenderResult) => void | Promise<void>
 }) {
   const {
     entries,
@@ -74,7 +85,7 @@ export function SelectionPanel({
     rendered,
     showVendored,
     vendoredCount,
-    pendingVendored,
+    pendingWarning,
     allFolderPaths,
   } = selection
 
@@ -214,6 +225,7 @@ export function SelectionPanel({
               render={selection.renderOnce}
               disabled={selectedFiles.length === 0}
               onError={selection.setError}
+              onExported={onExported}
             />
           </div>
 
@@ -227,10 +239,10 @@ export function SelectionPanel({
         </CardContent>
       </Card>
 
-      <VendoredWarning
-        pending={pendingVendored}
-        onCancel={() => selection.setPendingVendored(null)}
-        onConfirm={selection.confirmVendored}
+      <SelectionWarning
+        pending={pendingWarning}
+        onCancel={() => selection.setPendingWarning(null)}
+        onConfirm={selection.confirmWarning}
       />
     </>
   )

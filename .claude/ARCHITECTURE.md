@@ -38,14 +38,17 @@ code-excerpt-pdf/
 │   │   └── auth-buttons.tsx # sign in / out as Server Actions (they write cookies)
 │   ├── projects/
 │   │   ├── repo-list.tsx    # client list off /api/github/repos + install CTA
-│   │   └── repo-workspace.tsx   # loads the cached GitHub source into SelectionPanel
+│   │   ├── repo-stats.tsx   # share of the repo's volume already filed — no API call
+│   │   └── repo-workspace.tsx   # loads the cached GitHub source into SelectionPanel,
+│   │                        #   loads the export ledger, records a finished export
 │   ├── local/
 │   │   └── file-drop.tsx    # drop zone + file picker + webkitdirectory folder picker
 │   ├── selection/
 │   │   └── selection-panel.tsx  # THE selection UI both modes render: tree, total,
 │   │                        #   preview, download. Source-agnostic on purpose
 │   ├── tree/
-│   │   ├── vendored-warning.tsx # warn-then-proceed dialog (never blocks)
+│   │   ├── selection-warning.tsx # warn-then-proceed dialog for BOTH vendored and
+│   │   │                    #   already-used files (never blocks either)
 │   │   ├── tree-view.tsx    # scrollable root list
 │   │   ├── tree-node.tsx    # recursive row: tri-state checkbox, counts, estimate
 │   │   ├── tree-toolbar.tsx # expand / collapse / clear
@@ -55,7 +58,8 @@ code-excerpt-pdf/
 │   │   ├── pdf-preview.tsx  # iframe over an object URL — the SAME blob
 │   │   └── render.worker.ts     # THE only place pdfkit runs (classic Worker)
 │   └── ui/                  # shadcn: button card empty alert badge table spinner
-│                            #   separator checkbox collapsible scroll-area
+│                            #   separator checkbox collapsible scroll-area switch
+│                            #   alert-dialog progress skeleton
 ├── hooks/
 │   ├── use-pdf-worker.ts    # owns the worker, turns postMessage into promises
 │   └── use-file-selection.ts # ALL state between a ContentSource and a PDF —
@@ -184,6 +188,10 @@ code-excerpt-pdf/
 - **`drawFiles()` in `lib/pdf/render.ts` is the only place the flow is drawn.** `measure.test.ts` validates its paginator against that function, not against a copy — so measurement and rendering cannot drift apart.
 - **A folder showing `~33p` before selection and `28p` after is correct, not a bug — do not "fix" it by measuring eagerly.** Exact counts need file content. Anonymous mode has it, but GitHub mode does not: fetching every blob just to label a tree is the API spend the two-tier design exists to avoid. Measuring everything up front in anonymous mode would also stop exercising the byte estimator on the main path, which is the only thing keeping it calibrated for GitHub mode. The estimate stays, and the `~` prefix is what makes it honest. Decision confirmed with the user 2026-07-23.
 - **A file that fails to decode must get `status: "unsupported"`, not just be deselected.** A listing knows only names and sizes, so a binary like `.DS_Store` is `available` until something reads it. If it stays `available` after failing, the next bulk select re-adds it, it fails again, and its folder can never reach "all" — it sits indeterminate and re-reports the same error on every click. `lib/tree/selection.ts` skips the status and counts it separately.
+- **`used` is derived exactly like `vendored` — per render, from the ledger, never written onto the entry.** `useFileSelection` applies the vendored resolver first and `resolveStatuses` second, and `resolveStatuses` only ever touches an `available` file: a vendored or unreadable file has been decided on other grounds, and stacking `used` on top would hide why it is unselectable.
+- **A missing content hash means "assume unchanged", not "unknown".** Only a fetched file can be told apart from the one that was filed, and in GitHub mode most files are never fetched. `resolveStatuses` resolves those to `used` rather than `available`, because a used file silently re-entering a listing is the one failure the product exists to prevent — and the user can still select it deliberately, with a warning.
+- **A used file is marked and warned about, never disabled.** The checkbox still works. `components/tree/selection-warning.tsx` is the same dialog vendored files use, because SPEC forbids hard-blocking in both cases and two dialogs would have drifted apart.
+- **The export is recorded *after* the blob is saved, never before.** Recording first would lock files out of every future listing for a PDF nobody actually has. `DownloadButton` calls `onExported` only once `saveBlob` has run, and `actualPages` is the page count of that same render — never a second one.
 - **Vendored status is derived on every render, never stored on the entry.** An override has to be able to flip it back, and a folder rule has to reach files listed later. Only `unsupported` is sticky, because it records something discovered by actually reading the file.
 - **`app/(app)/layout.tsx` calls `auth()`, which makes every page under it dynamic — including `/local`.** That is the price of a session-aware header, not a mistake. What it must never become is a gate: anonymous mode is required to work with no account at all, so only the pages that actually read GitHub check for a session.
 - **`auth()` fails with `UntrustedHost` on any host Auth.js cannot infer** — a production build on a port other than 3000, a container, a proxy. It does not throw the page away, it just renders everything as signed out, which reads as a login bug. `AUTH_TRUST_HOST=true` fixes it; Vercel is detected automatically. Noted in `.env.example`.

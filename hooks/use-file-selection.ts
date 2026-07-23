@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react"
 
 import type { NodeCounts } from "@/components/tree/tree-node"
-import type { PendingVendored } from "@/components/tree/vendored-warning"
+import type { PendingWarning } from "@/components/tree/selection-warning"
 import { usePdfWorker } from "@/hooks/use-pdf-worker"
 import { decodeSourceFile } from "@/lib/files/decode"
 import { estimatePages, estimatePagesForFiles } from "@/lib/pdf/estimate"
@@ -21,6 +21,12 @@ import {
   type SelectionState,
 } from "@/lib/tree/selection"
 import type { ContentSource, FileEntry, TreeNode } from "@/lib/tree/types"
+import { sha256Hex } from "@/lib/uniqueness/hash"
+import { projectStats } from "@/lib/uniqueness/stats"
+import {
+  resolveStatuses,
+  type UsedFileRecord,
+} from "@/lib/uniqueness/status"
 import {
   createVendoredResolver,
   type ManualOverride,
@@ -62,8 +68,21 @@ export function useFileSelection() {
     gitattributes?: string
     componentsJson?: string
   }>({})
-  const [pendingVendored, setPendingVendored] =
-    useState<PendingVendored | null>(null)
+  const [pendingWarning, setPendingWarning] =
+    useState<PendingWarning | null>(null)
+  /**
+   * The export ledger for this source. Empty in anonymous mode, which
+   * persists nothing and therefore has nothing to be marked against.
+   */
+  const [usedFiles, setUsedFiles] = useState<UsedFileRecord[]>([])
+  /**
+   * SHA-256 per path, filled as content is read.
+   *
+   * Only a fetched file can be told apart from the one that was filed, so an
+   * absent entry deliberately means "assume unchanged" — `resolveStatuses`
+   * reads it that way, and a used file is never silently re-offered.
+   */
+  const [hashes, setHashes] = useState<Map<string, string>>(new Map())
   const [repoRoot, setRepoRoot] = useState("")
   const [rendered, setRendered] = useState<{
     signature: string
@@ -95,19 +114,33 @@ export function useFileSelection() {
    * `unsupported` is sticky, because it records something that was actually
    * discovered by reading the file.
    */
-  const classified = useMemo(
-    () =>
-      entries.map((entry) => {
-        if (entry.status === "unsupported") return entry
-        const verdict = resolveVendored(relative(entry.path))
-        return {
-          ...entry,
-          status: verdict?.vendored
-            ? ("vendored" as const)
-            : ("available" as const),
-        }
-      }),
-    [entries, resolveVendored, relative]
+  const classified = useMemo(() => {
+    const vendored = entries.map((entry) => {
+      if (entry.status === "unsupported") return entry
+      const verdict = resolveVendored(relative(entry.path))
+      return {
+        ...entry,
+        status: verdict?.vendored
+          ? ("vendored" as const)
+          : ("available" as const),
+      }
+    })
+    // The ledger is applied last, and only ever to `available` files: a
+    // vendored or unreadable file has already been decided on other grounds,
+    // and marking it `used` on top would hide why it is not selectable.
+    return resolveStatuses(vendored, usedFiles, hashes)
+  }, [entries, resolveVendored, relative, usedFiles, hashes])
+
+  /**
+   * Share of the project already filed.
+   *
+   * Arithmetic over `UsedFile.sizeBytes` and the tree listing already in hand
+   * — SPEC requires this to cost **no** extra GitHub call, which is the whole
+   * reason the size is recorded in the ledger rather than looked up.
+   */
+  const stats = useMemo(
+    () => projectStats(classified, usedFiles),
+    [classified, usedFiles]
   )
 
   const tree = useMemo(() => buildTree(classified), [classified])
@@ -153,6 +186,7 @@ export function useFileSelection() {
       setSource(next)
       setSelected(new Set())
       setMeasured(new Map())
+      setHashes(new Map())
       setRendered(null)
       setIsPreviewOpen(false)
       // Font metrics are needed to label the tree at all, and they do not
@@ -220,6 +254,7 @@ export function useFileSelection() {
       try {
         const failures: Rejected[] = []
         const readable: { path: string; name: string; text: string }[] = []
+        const digests: [string, string][] = []
 
         for (const path of missing) {
           const bytes = await source.readFile(path)
@@ -230,9 +265,17 @@ export function useFileSelection() {
               name: path.split("/").pop() ?? path,
               text: decoded.text,
             })
+            // Hashed here, over the RAW bytes, because this is the moment the
+            // content exists in the page: it is what tells `used` apart from
+            // `used-but-changed`, and it is what the export records.
+            digests.push([path, await sha256Hex(bytes)])
           } else {
             failures.push({ path, reason: decoded.reason })
           }
+        }
+
+        if (digests.length > 0) {
+          setHashes((current) => new Map([...current, ...digests]))
         }
 
         if (failures.length > 0) {
@@ -302,11 +345,30 @@ export function useFileSelection() {
   const handleToggleSelect = useCallback(
     (node: TreeNode, state: SelectionState) => {
       if (node.kind === "file") {
-        const verdict = verdictFor(node)
-        // Warn, never block: SPEC forbids hard-blocking a vendored file.
-        if (verdict?.vendored && !selected.has(node.path)) {
-          setPendingVendored({ path: node.path, reason: verdict.reason })
-          return
+        // Warn, never block — SPEC forbids hard-blocking either case. Only
+        // adding warns; removing a file is always free.
+        if (!selected.has(node.path)) {
+          const verdict = verdictFor(node)
+          if (verdict?.vendored) {
+            setPendingWarning({
+              path: node.path,
+              reason: verdict.reason,
+              kind: "vendored",
+            })
+            return
+          }
+          const status = node.entry.status
+          if (status === "used" || status === "used-but-changed") {
+            setPendingWarning({
+              path: node.path,
+              reason:
+                status === "used"
+                  ? "already filed, and the content has not changed since"
+                  : "already filed, though the content has changed since",
+              kind: status,
+            })
+            return
+          }
         }
         applySelection(toggleFile(node.path, selected))
         return
@@ -333,12 +395,12 @@ export function useFileSelection() {
     [applySelection, selected, verdictFor]
   )
 
-  const confirmVendored = useCallback(() => {
-    if (pendingVendored) {
-      applySelection(toggleFile(pendingVendored.path, selected))
+  const confirmWarning = useCallback(() => {
+    if (pendingWarning) {
+      applySelection(toggleFile(pendingWarning.path, selected))
     }
-    setPendingVendored(null)
-  }, [applySelection, pendingVendored, selected])
+    setPendingWarning(null)
+  }, [applySelection, pendingWarning, selected])
 
   const selectedFiles = useMemo(
     () => flattenFiles(tree).filter((file) => selected.has(file.path)),
@@ -432,6 +494,31 @@ export function useFileSelection() {
   }, [selectedFiles, source])
 
   /**
+   * What the ledger needs to record about the current selection.
+   *
+   * Path, hash and size — never a byte of content. The hash comes from the map
+   * filled while measuring; anything missing is read again (the source caches,
+   * so this costs no request) rather than recorded as a guess, because a wrong
+   * hash would resolve a genuinely unchanged file to `used-but-changed`
+   * forever.
+   */
+  const describeSelection = useCallback(async () => {
+    if (!source) return []
+    return Promise.all(
+      selectedFiles.map(async (file) => {
+        const known = hashes.get(file.path)
+        const contentHash =
+          known ?? (await sha256Hex(await source.readFile(file.path)))
+        return {
+          path: file.path,
+          contentHash,
+          sizeBytes: file.entry.sizeBytes,
+        }
+      })
+    )
+  }, [hashes, selectedFiles, source])
+
+  /**
    * ONE render feeds both the preview and the download. Rendering twice would
    * give two page counts free to disagree — the drift the single-run rule in
    * lib/pdf/render.ts exists to prevent.
@@ -476,8 +563,10 @@ export function useFileSelection() {
     rendered: rendered?.result ?? null,
     showVendored,
     vendoredCount,
-    pendingVendored,
+    pendingWarning,
     allFolderPaths,
+    stats,
+    usedFiles,
     setError,
     setNotice,
     setRejected,
@@ -485,12 +574,14 @@ export function useFileSelection() {
     setExpanded,
     setShowVendored,
     setIsPreviewOpen,
-    setPendingVendored,
+    setPendingWarning,
+    setUsedFiles,
     toggleExpand,
     handleToggleSelect,
     handleToggleVendored,
-    confirmVendored,
+    confirmWarning,
     countsFor,
+    describeSelection,
     verdictFor,
     renderOnce,
   }
