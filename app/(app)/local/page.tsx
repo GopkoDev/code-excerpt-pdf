@@ -1,10 +1,11 @@
 "use client"
 
 import { useCallback, useMemo, useState } from "react"
-import { FilesIcon, FileWarningIcon } from "lucide-react"
+import { EyeIcon, FilesIcon, FileWarningIcon } from "lucide-react"
 
 import { FileDrop } from "@/components/local/file-drop"
 import { DownloadButton } from "@/components/pdf/download-button"
+import { PdfPreview } from "@/components/pdf/pdf-preview"
 import { PageTotal } from "@/components/tree/page-total"
 import { TreeToolbar } from "@/components/tree/tree-toolbar"
 import { TreeView } from "@/components/tree/tree-view"
@@ -39,7 +40,11 @@ import { usePdfWorker } from "@/hooks/use-pdf-worker"
 import { decodeSourceFile } from "@/lib/files/decode"
 import { estimatePages, estimatePagesForFiles } from "@/lib/pdf/estimate"
 import { paginate, type MeasuredFile, type Metrics } from "@/lib/pdf/measure"
-import type { SourceFile } from "@/lib/pdf/render"
+import {
+  selectionSignature,
+  type RenderResult,
+  type SourceFile,
+} from "@/lib/pdf/render"
 import { createLocalSource, toLocalFiles } from "@/lib/sources/local"
 import { buildTree, commonRoot, flattenFiles } from "@/lib/tree/build"
 import {
@@ -82,6 +87,12 @@ export default function LocalPage() {
   const [pendingVendored, setPendingVendored] =
     useState<PendingVendored | null>(null)
   const [repoRoot, setRepoRoot] = useState("")
+  const [rendered, setRendered] = useState<{
+    signature: string
+    result: RenderResult
+  } | null>(null)
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [isRendering, setIsRendering] = useState(false)
 
   const resolveVendored = useMemo(
     () =>
@@ -286,6 +297,9 @@ export default function LocalPage() {
   const applySelection = useCallback(
     (next: Set<string>) => {
       setSelected(next)
+      // A preview of a selection the user has moved on from is worse than no
+      // preview: it looks current and is not.
+      setIsPreviewOpen(false)
       void measureSelected(next)
     },
     [measureSelected]
@@ -413,6 +427,32 @@ export default function LocalPage() {
     )
   }, [selectedFiles, source])
 
+  /**
+   * ONE render feeds both the preview and the download. Rendering twice would
+   * give two page counts free to disagree — the drift the single-run rule in
+   * lib/pdf/render.ts exists to prevent.
+   */
+  const renderOnce = useCallback(async (): Promise<RenderResult> => {
+    const files = await exportFiles()
+    const signature = selectionSignature(files)
+    if (rendered?.signature === signature) return rendered.result
+
+    setIsRendering(true)
+    try {
+      const response = await send({ type: "render", files })
+      if (response.type !== "rendered") throw new Error("Unexpected response.")
+      const result: RenderResult = {
+        blob: response.blob,
+        pageCount: response.pageCount,
+        files: response.files,
+      }
+      setRendered({ signature, result })
+      return result
+    } finally {
+      setIsRendering(false)
+    }
+  }, [exportFiles, rendered, send])
+
   return (
     <main className="mx-auto flex max-w-4xl flex-col gap-6 p-8">
       <div className="flex flex-col gap-2">
@@ -521,14 +561,37 @@ export default function LocalPage() {
             </>
           )}
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={selectedFiles.length === 0 || isRendering}
+              onClick={() => {
+                renderOnce()
+                  .then(() => setIsPreviewOpen(true))
+                  .catch((cause) =>
+                    setError(
+                      cause instanceof Error ? cause.message : String(cause)
+                    )
+                  )
+              }}
+            >
+              <EyeIcon data-icon="inline-start" />
+              {isRendering ? "Building…" : "Preview"}
+            </Button>
             <DownloadButton
-              resolveFiles={exportFiles}
+              render={renderOnce}
               disabled={selectedFiles.length === 0}
-              send={send}
               onError={setError}
             />
           </div>
+
+          {isPreviewOpen && rendered && (
+            <PdfPreview
+              blob={rendered.result.blob}
+              pageCount={rendered.result.pageCount}
+              onClose={() => setIsPreviewOpen(false)}
+            />
+          )}
         </CardContent>
       </Card>
       <VendoredWarning

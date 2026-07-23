@@ -25,7 +25,8 @@ code-excerpt-pdf/
 │   │   ├── tree-toolbar.tsx # expand / collapse / clear
 │   │   └── page-total.tsx   # running total — display only, NEVER a target input
 │   ├── pdf/
-│   │   ├── download-button.tsx  # asks the worker to render, saves the Blob
+│   │   ├── download-button.tsx  # saves the Blob from the shared render cache
+│   │   ├── pdf-preview.tsx  # iframe over an object URL — the SAME blob
 │   │   └── render.worker.ts     # THE only place pdfkit runs (classic Worker)
 │   └── ui/                  # shadcn: button card empty alert badge table spinner
 │                            #   separator checkbox collapsible scroll-area
@@ -126,6 +127,7 @@ code-excerpt-pdf/
 - **A file that fails to decode must get `status: "unsupported"`, not just be deselected.** A listing knows only names and sizes, so a binary like `.DS_Store` is `available` until something reads it. If it stays `available` after failing, the next bulk select re-adds it, it fails again, and its folder can never reach "all" — it sits indeterminate and re-reports the same error on every click. `lib/tree/selection.ts` skips the status and counts it separately.
 - **Vendored status is derived on every render, never stored on the entry.** An override has to be able to flip it back, and a folder rule has to reach files listed later. Only `unsupported` is sticky, because it records something discovered by actually reading the file.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
+- **Preview and download share one render**, keyed by `selectionSignature()`. Rendering separately would produce two page counts free to disagree — the drift the single-run rule exists to prevent. A browser check asserts the download saves the identical `Blob` *object* the preview displayed.
 - `renderPdf()` returns the page count of the run that produced the bytes. Never compute `actualPages` from a second render; the recorded number would be free to drift from the PDF the user downloaded.
 - `generate.cjs` is **not** the app and must not be ported into it. It is committed for one reason only: it defines how the exported PDF must **look**. It is not a source of requirements — notably, its `.js/.jsx/.ts/.tsx` filter is incidental, while the product is language-agnostic. Its contract narrows to **geometry** (A4, 60pt margins, 9pt code, 13pt bold titles, `lineGap` 2, alphabetical, continuous flow); the typeface is deliberately different in the app, so page counts will not match. Run it as `node generate.cjs <dir>`; output lands in the gitignored `output/`.
 - `docs/SPEC.md` is the target, not `README.md`. `README.md` is the public product pitch; the current app is still a fresh scaffold and implements none of it.

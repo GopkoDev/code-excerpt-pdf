@@ -5,8 +5,7 @@ import { DownloadIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@/components/ui/spinner"
-import type { SourceFile } from "@/lib/pdf/render"
-import type { WorkerResponse } from "@/lib/pdf/worker-protocol"
+import type { RenderResult } from "@/lib/pdf/render"
 
 function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -18,18 +17,16 @@ function saveBlob(blob: Blob, filename: string) {
 }
 
 export function DownloadButton({
-  resolveFiles,
+  render,
   disabled,
-  send,
   onError,
 }: {
-  /** Content is read lazily, at export time, for the selection only. */
-  resolveFiles: () => Promise<SourceFile[]>
+  /**
+   * Produces the document — served from the shared render cache, so the bytes
+   * saved here are the same ones the preview showed.
+   */
+  render: () => Promise<RenderResult>
   disabled?: boolean
-  send: (request: {
-    type: "render"
-    files: SourceFile[]
-  }) => Promise<WorkerResponse>
   onError: (message: string) => void
 }) {
   const [isRendering, setIsRendering] = useState(false)
@@ -38,11 +35,9 @@ export function DownloadButton({
   const download = async () => {
     setIsRendering(true)
     try {
-      const files = await resolveFiles()
-      const response = await send({ type: "render", files })
-      if (response.type !== "rendered") throw new Error("Unexpected response.")
-      saveBlob(response.blob, "code-excerpt.pdf")
-      setLastPageCount(response.pageCount)
+      const result = await render()
+      saveBlob(result.blob, "code-excerpt.pdf")
+      setLastPageCount(result.pageCount)
     } catch (error) {
       onError(error instanceof Error ? error.message : String(error))
     } finally {

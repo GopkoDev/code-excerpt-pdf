@@ -5,7 +5,11 @@ import { describe, expect, it } from "vitest"
 
 import { CODE_FONT, MARGIN, TITLE_FONT } from "@/lib/pdf/constants"
 import { measureFile, metricsOf, paginate } from "@/lib/pdf/measure"
-import { renderPdf, type SourceFile } from "@/lib/pdf/render"
+import {
+  renderPdf,
+  selectionSignature,
+  type SourceFile,
+} from "@/lib/pdf/render"
 import { sha256Hex } from "@/lib/uniqueness/hash"
 
 const FONT_DIR = join(process.cwd(), "public/fonts")
@@ -124,5 +128,53 @@ describe("renderPdf", () => {
 
   it("refuses an empty selection", async () => {
     await expect(renderPdf(() => createDoc(), [])).rejects.toThrow(/no files/i)
+  })
+})
+
+/**
+ * The cache key that lets one render serve both the preview and the download.
+ * If it ever collides across different selections, the user previews one
+ * document and downloads another.
+ */
+describe("selectionSignature", () => {
+  const f = (name: string, text: string) => sourceFile(name, text)
+
+  it("is stable for the same selection", () => {
+    const files = [f("a.ts", "x"), f("b.ts", "y")]
+    expect(selectionSignature(files)).toBe(selectionSignature(files))
+  })
+
+  it("ignores the order files arrive in", () => {
+    expect(selectionSignature([f("a.ts", "x"), f("b.ts", "y")])).toBe(
+      selectionSignature([f("b.ts", "y"), f("a.ts", "x")])
+    )
+  })
+
+  it("changes when a file is added", () => {
+    expect(selectionSignature([f("a.ts", "x")])).not.toBe(
+      selectionSignature([f("a.ts", "x"), f("b.ts", "y")])
+    )
+  })
+
+  it("changes when a file is removed", () => {
+    expect(selectionSignature([f("a.ts", "x"), f("b.ts", "y")])).not.toBe(
+      selectionSignature([f("b.ts", "y")])
+    )
+  })
+
+  it("changes when content changes under the same name", () => {
+    expect(selectionSignature([f("a.ts", "one")])).not.toBe(
+      selectionSignature([f("a.ts", "two")])
+    )
+  })
+
+  it("distinguishes two files whose names concatenate ambiguously", () => {
+    expect(selectionSignature([f("ab.ts", "x"), f("c.ts", "y")])).not.toBe(
+      selectionSignature([f("a.ts", "x"), f("bc.ts", "y")])
+    )
+  })
+
+  it("is empty-safe", () => {
+    expect(typeof selectionSignature([])).toBe("string")
   })
 })

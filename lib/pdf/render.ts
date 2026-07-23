@@ -50,6 +50,40 @@ export type RenderResult = {
 export type DocumentFactory = () => PDFKit.PDFDocument
 
 /**
+ * A cache key identifying exactly what a render would contain.
+ *
+ * This is what lets one render serve both the preview and the download, which
+ * the plan requires: two renders mean two page counts free to disagree. A
+ * collision would be worse than no cache at all — the user would preview one
+ * document and download another — so name and byte length are both included,
+ * and separated by characters that cannot occur in a filename.
+ */
+export function selectionSignature(files: SourceFile[]): string {
+  const UNIT = "\u0000"
+  return files
+    .map((file) => [file.name, file.bytes.length, checksum(file.bytes)].join(UNIT))
+    .sort()
+    .join("\u0001")
+}
+
+/**
+ * FNV-1a over the raw bytes.
+ *
+ * Name and length alone are not enough: two different one-character edits keep
+ * both. This is a *cache* key, not a ledger entry — `sha256Hex` remains the
+ * hash that records what was exported. FNV is used because it is synchronous
+ * and cheap, which `crypto.subtle` is not.
+ */
+function checksum(bytes: Uint8Array): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < bytes.length; i++) {
+    hash ^= bytes[i]
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+/**
  * Alphabetical by UTF-16 code unit — the same ordering `generate.cjs` gets
  * from a bare `Array.prototype.sort`. Deliberately not `localeCompare`, whose
  * result depends on the ambient locale and would make page counts vary
