@@ -43,8 +43,9 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
       dropped the obsolete `button.tsx` local-edit bullet. _(Folded into Task 1's
       commit — the doc-accuracy gate required reflecting the reverted `button.tsx`
       and the new `button-link` files in the same commit.)_
-- [ ] **Task 5** — Add `@testing-library/dom` to `devDependencies` (sec, cr); fix the
-      "340 → 387" count in `docs/notes/2026-07-23-…` (real total 386). (te)
+- [x] **Task 5** — Declared `@testing-library/dom ^10.4.1` explicitly in
+      `devDependencies` (lockfile promoted it from a transitive peer, no version
+      changes); fixed the "340 → 387" count in the work log to 386. (sec, cr, te)
 
 ### ▸ Checkpoint B — docs match code
 
