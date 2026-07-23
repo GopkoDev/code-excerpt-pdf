@@ -35,18 +35,22 @@ model User {
 model Repo {
   id            String   @id @default(cuid())
   userId        String
-  githubRepoId  String
   owner         String
   name          String
-  defaultBranch String
+  // Decorative and therefore optional: regeneration re-fetches by the pinned
+  // commitSha, never by branch. See the deviation note at the bottom of this
+  // file for why `githubRepoId` from SPEC §3 is not here.
+  defaultBranch String?
   createdAt     DateTime @default(now())
 
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   usedFiles     UsedFile[]
   exports       Export[]
 
-  // A user may only ever hold one row per GitHub repo.
-  @@unique([userId, githubRepoId])
+  // A user may only ever hold one row per repository. `owner`/`name` is the
+  // identity, because it is the only one the app holds without spending a
+  // GitHub call — see the deviation note below.
+  @@unique([userId, owner, name])
 }
 
 model Export {
@@ -86,3 +90,18 @@ model UsedFile {
   @@index([repoId, path])
   @@index([exportId])
 }
+
+// ---------------------------------------------------------------------------
+// Deviation from SPEC §3: `Repo.githubRepoId` is not stored.
+//
+// SPEC lists it, and it would survive a rename where `owner`/`name` does not.
+// But nothing in the app ever holds it for free: the `[repoId]` URL segment is
+// `owner_repo`, and the Trees response carries no repository id — so filling it
+// would mean one extra `GET /repos/{owner}/{repo}` on the export path, and the
+// per-project stats read (`listUsedFiles`) would need a lookup of its own on a
+// path SPEC requires to cost **no** GitHub call.
+//
+// The trade accepted: a renamed repository starts a fresh ledger, and the old
+// one stays visible in the exports history. Revisit when a rename is actually
+// observed; adding the column later is additive.
+// ---------------------------------------------------------------------------

@@ -322,29 +322,62 @@ Acceptance:
 
 ## Slice 6 — Uniqueness (migration 1)
 
-> **Schema, config, client and status resolution written; no migration has been run.**
-> `npx prisma migrate dev --name init` needs a live Neon database. Note the plan expected
-> `migrations.url` in `prisma.config.ts`; Prisma 7.9 actually takes `datasource.url` — verified
-> against the installed types.
+> **Everything is written and every rule is under test; NO MIGRATION HAS BEEN RUN.**
+> `npx prisma migrate dev --name init` needs a live Neon database and the user declined to have
+> one touched, so nothing below has executed a single SQL statement. What that leaves unproven is
+> listed under "What is still owed" at the end of this slice — read it before calling slice 6
+> done. Note the plan expected `migrations.url` in `prisma.config.ts`; Prisma 7.9 actually takes
+> `datasource.url` — verified against the installed types.
 
 
-- [ ] `prisma/schema.prisma` — **only** `User`, `Repo`, `Export`, `UsedFile`
-- [ ] `prisma.config.ts` (`datasource.url` moved here); generator `prisma-client` with
+- [x] `prisma/schema.prisma` — **only** `User`, `Repo`, `Export`, `UsedFile`. **Deviation:
+      `Repo.githubRepoId` is not stored** and `Repo` is keyed on `(userId, owner, name)`; the
+      reasoning is argued at the bottom of the schema file. `defaultBranch` became optional for
+      the same reason — nothing ever holds it for free, and regeneration pins commit SHAs
+- [x] `prisma.config.ts` (`datasource.url` moved here); generator `prisma-client` with
       `output = "../lib/db/generated"`
-- [ ] `lib/db/client.ts` — `PrismaNeon` adapter + `globalThis` singleton
-- [ ] `DATABASE_URL` (pooled, runtime) **and** `DIRECT_URL` (unpooled, migrations)
-- [ ] `"postinstall": "prisma generate"`
-- [ ] Resolve empirically whether `serverExternalPackages` / a Turbopack alias is needed for the
-      custom output path — **record the answer in `next.config.ts` with a comment**
-- [ ] Upsert `User` from the `signIn` callback (no `@auth/prisma-adapter` — no Prisma 7 support)
-- [ ] `app/api/exports/route.ts`, `lib/uniqueness/status.ts` + test
+- [x] `lib/db/client.ts` — `PrismaNeon` adapter + `globalThis` singleton, built **lazily**:
+      `auth.ts` now reaches the database and every page imports `auth.ts`, so a client
+      constructed at module scope would be constructed during `next build`
+- [x] `DATABASE_URL` (pooled, runtime) **and** `DIRECT_URL` (unpooled, migrations)
+- [x] `"postinstall": "prisma generate"`
+- [x] Resolve empirically whether `serverExternalPackages` / a Turbopack alias is needed for the
+      custom output path — **neither is**; `npm run build` compiles and collects `/api/exports`
+      with `next.config.ts` still empty. Recorded there with the reasoning
+- [x] Upsert `User` from the `signIn` callback (no `@auth/prisma-adapter` — no Prisma 7 support).
+      The upsert is allowed to fail silently and `POST /api/exports` repeats it, so a database
+      hiccup costs an early write rather than a sign-in
+- [x] `app/api/exports/route.ts` (POST records, GET lists) plus `app/api/exports/used/route.ts`
+      (the ledger for one repo), `lib/uniqueness/status.ts` + test
+- [x] **`lib/db/exports.ts` is a port, not a module that imports Prisma.** The client is a
+      parameter, so `exports.test.ts` proves the rules against an in-memory fake with no database
+      — which is the only way any of this could be tested at all here. `lib/db/exports-db.ts` is
+      the single adapter; `const db: ExportsDb = prisma` does not compile, because Prisma's
+      methods are generic
+- [x] `lib/exports/payload.ts` + test — the NDA constraint enforced at the boundary: Zod names
+      every field it keeps, so a client sending `content` alongside a path cannot reach Prisma
 
 Acceptance:
 
-- [ ] Export persists one `UsedFile` per file with `commitSha`, `contentHash`, `sizeBytes`
-- [ ] Used files marked on next load; same path + new hash → `used-but-changed`
-- [ ] A used file can never silently re-enter a listing
-- [ ] Per-project stats compute with **no** extra GitHub call
+- [x] Export persists one `UsedFile` per file with `commitSha`, `contentHash`, `sizeBytes` —
+      asserted in `lib/db/exports.test.ts`, including a key-by-key check that nothing else rides
+      along. **Against the fake, not a database**
+- [x] Used files marked on next load; same path + new hash → `used-but-changed` —
+      `lib/uniqueness/status.test.ts`, wired into the repo view
+- [x] A used file can never silently re-enter a listing — bulk folder select skips it and counts
+      it, and picking one by hand warns first (SPEC forbids hard-blocking)
+- [x] Per-project stats compute with **no** extra GitHub call — `lib/uniqueness/stats.ts` is
+      arithmetic over `UsedFile.sizeBytes` and the tree listing already in hand
+      (`stats.test.ts`)
+
+### What is still owed on slice 6
+
+- [ ] **[ext]** Run migration 1 against a real Neon database (`npx prisma migrate dev --name
+      init`), then re-run the whole flow. Until then the SQL Prisma generates from this schema
+      has never executed, no query has ever hit Postgres, and the compound key
+      `userId_owner_name` is proven only by the generated types
+- [ ] Exercise sign-in → export → reopen the repo on a real database and confirm the row shows
+      as `used`
 
 ## ▸ CHECKPOINT D — NDA review of migration 1
 

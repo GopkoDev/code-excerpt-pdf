@@ -1,6 +1,9 @@
 import NextAuth from "next-auth"
 import GitHub from "next-auth/providers/github"
 
+import { exportsDb } from "@/lib/db/exports-db"
+import { upsertUser } from "@/lib/db/exports"
+
 /**
  * Auth.js v5 against a **GitHub App** — not a classic OAuth App.
  *
@@ -26,6 +29,14 @@ declare module "next-auth" {
    */
   interface Session {
     error?: "expired" | "reauth-required"
+    /**
+     * GitHub's numeric account id, as a string — the join key to the `User`
+     * row. Public information, unlike the token: it is what a profile URL
+     * resolves to. Auth.js puts no id on `session.user` under the JWT
+     * strategy, so it is carried explicitly.
+     */
+    githubId?: string
+    githubLogin?: string
   }
 }
 
@@ -37,7 +48,16 @@ declare module "@auth/core/jwt" {
     accessTokenExpiresAt?: number
     refreshTokenExpiresAt?: number
     error?: "expired" | "reauth-required"
+    githubId?: string
+    githubLogin?: string
   }
+}
+
+/** The two public fields of a GitHub profile this app keeps. */
+function githubIdentity(profile: unknown) {
+  const value = profile as { id?: number | string; login?: string } | undefined
+  if (value?.id === undefined || typeof value.login !== "string") return null
+  return { githubId: String(value.id), login: value.login }
 }
 
 const nowInSeconds = () => Math.floor(Date.now() / 1000)
@@ -89,6 +109,31 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
   callbacks: {
     /**
+     * The `User` row, created here because there is no adapter.
+     *
+     * `@auth/prisma-adapter` declares no Prisma 7 support and the JWT session
+     * strategy needs none, so this one upsert is the whole of what an adapter
+     * would have done. The rest of the schema hangs off it.
+     *
+     * A database hiccup must not cost the user their sign-in: local export
+     * needs no account at all, and reading a repository needs no row either.
+     * `POST /api/exports` upserts again before recording, so the row is
+     * self-healing and the only thing lost here is an early write.
+     */
+    async signIn({ profile }) {
+      const identity = githubIdentity(profile)
+      if (identity) {
+        try {
+          await upsertUser(exportsDb, identity)
+        } catch {
+          // Deliberately swallowed — see above. Nothing loggable either: the
+          // error could carry the connection string.
+        }
+      }
+      return true
+    },
+
+    /**
      * TRAP 3 — this callback performs **no network I/O**, ever.
      *
      * Refreshing here is the documented cause of random logouts: Next forbids
@@ -98,7 +143,7 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
      * place allowed to act on it, and it feeds the result back through the
      * `update` trigger below.
      */
-    async jwt({ token, account, trigger, session }) {
+    async jwt({ token, account, profile, trigger, session }) {
       if (trigger === "update" && session) {
         const update = session as Partial<TokenUpdate>
         if (update.accessToken) {
@@ -118,6 +163,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
       if (account) {
         const extras = account as unknown as {
           refresh_token_expires_in?: number
+        }
+        // The identity, kept on the token because the session is rebuilt from
+        // it on every request and the `User` row is looked up by it.
+        const identity = githubIdentity(profile)
+        if (identity) {
+          token.githubId = identity.githubId
+          token.githubLogin = identity.login
         }
         token.accessToken = account.access_token
         token.refreshToken = account.refresh_token
@@ -156,6 +208,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
 
     async session({ session, token }) {
       session.error = token.error
+      // Still no access token here — only the two public identity fields the
+      // exports pages need. See the `Session` declaration above.
+      session.githubId = token.githubId
+      session.githubLogin = token.githubLogin
       return session
     },
   },

@@ -25,8 +25,17 @@ function createClient(): PrismaClient {
   return new PrismaClient({ adapter })
 }
 
-export const prisma = globalForPrisma.prisma ?? createClient()
-
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma
+/**
+ * Built on first use, never at import.
+ *
+ * `auth.ts` reaches the database, and every page imports `auth.ts` — so a
+ * client constructed at module scope would be constructed during `next build`,
+ * where `DATABASE_URL` is often absent and the failure reads as a broken build
+ * rather than a missing variable. Anonymous mode must also keep working with
+ * no database configured at all, which it cannot if merely importing the
+ * module throws.
+ */
+export function getPrisma(): PrismaClient {
+  globalForPrisma.prisma ??= createClient()
+  return globalForPrisma.prisma
 }

@@ -22,6 +22,10 @@ code-excerpt-pdf/
 │   │       └── [repoId]/page.tsx  # parses the id, checks the session, renders the workspace
 │   └── api/
 │       ├── auth/[...nextauth]/route.ts  # Auth.js handlers
+│       ├── exports/
+│       │   ├── route.ts       # POST records an export, GET lists them.
+│       │   │                  #   THE only write path in the app
+│       │   └── used/route.ts  # the ledger for one repo — no GitHub call
 │       └── github/
 │           ├── repos/route.ts    # installations → the repos each one can reach
 │           ├── tree/route.ts     # one recursive=1 Trees call per repo
@@ -76,11 +80,20 @@ code-excerpt-pdf/
 │   ├── files/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
 │   ├── db/
-│   │   ├── client.ts        # PrismaClient + PrismaNeon adapter, globalThis singleton
+│   │   ├── client.ts        # getPrisma(): PrismaNeon adapter, globalThis singleton,
+│   │   │                    #   built LAZILY so importing it opens no connection
+│   │   ├── exports.ts       # THE persistence port: every DB call the app makes,
+│   │   │                    #   taking the client as a parameter
+│   │   ├── exports.test.ts  # proves the port against an in-memory fake — no database
+│   │   ├── exports-db.ts    # the real ExportsDb: Prisma narrowed to the port
 │   │   └── generated/       # GITIGNORED, produced by `prisma generate` (postinstall)
+│   ├── exports/
+│   │   └── payload.ts       # Zod schema for POST /api/exports — the ONLY shape a
+│   │                        #   browser can push into the database
 │   ├── uniqueness/
 │   │   ├── hash.ts          # sha256Hex over RAW bytes — never post-normalization
-│   │   └── status.ts        # used vs used-but-changed resolution
+│   │   ├── status.ts        # used vs used-but-changed resolution
+│   │   └── stats.ts         # share of a project's volume already filed
 │   ├── sources/
 │   │   ├── local.ts         # ContentSource over dropped files; LAZY reads
 │   │   ├── github.ts        # ContentSource over a repo; ONE Trees call, cached
@@ -149,6 +162,7 @@ code-excerpt-pdf/
 - **`app/(app)/projects/`** — GitHub mode. `page.tsx` picks a repository, `[repoId]/page.tsx` opens one. Neither talks to GitHub: they resolve the session and hand off to a client component that goes through `app/api/github/*`.
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
+- **`lib/db/` + `lib/exports/`** — persistence, kept deliberately thin. `exports.ts` is a *port*: it receives the Prisma client as a parameter, so every rule it encodes (a repo row is reused, one `UsedFile` per file, a ledger never crosses users) is proven in `exports.test.ts` against an in-memory fake, with no database anywhere. `exports-db.ts` is the one adapter that hands it the real client. Nothing else in the app imports Prisma.
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
 - **`components/ui/checkbox.tsx`** — the one shadcn component with a local edit: base-ui's `Checkbox.Root` has a native `indeterminate` prop and renders its indicator when *checked OR indeterminate*, so a `MinusIcon` was added beside the `CheckIcon` and swapped via `data-indeterminate`. That is the tri-state; do not rebuild it in application code.
 - **`app/(app)/local/`** — anonymous mode: drop files, see exact line counts and a running page total, download. No account, no network, nothing persisted. The page itself is now only the drop zone plus `SelectionPanel`; everything else lives in `useFileSelection`, which GitHub mode drives identically.
@@ -178,6 +192,10 @@ code-excerpt-pdf/
 - **A `ContentSource` for a repository lives in module scope, not in React state.** SPEC: navigating away from a repo and back in the same session issues zero further GitHub calls — but navigating remounts the page, and a source built in the component would repeat the Trees call. `lib/sources/github-cache.ts` holds the instances; the source *is* the cache, so no query library wraps it. **No React Query was added**: nothing left for it to cache, and it would have been a second place for the same truth to live.
 - **The repository page fetches `.gitattributes` and `components.json` on open** (one blob call each, only if the tree lists them). Vendored detection needs them, and they are the same two files anonymous mode reads. It is a deliberate two-request cost per repo, not a leak in the "content only for selected files" rule.
 - **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The client half is `lib/github/refreshing-fetch.ts`: it recognises `401 token-expired`, posts to that one route, and retries once — with a single-flight promise, because selecting a folder fires several blob reads at once and GitHub's refresh tokens are single-use. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
+- **Nothing outside `lib/db/exports-db.ts` may import Prisma.** Every query goes through the port in `lib/db/exports.ts`, which takes the client as a parameter — that is what makes the ledger's rules testable with no database at all, and it keeps the complete inventory of persisted fields readable in one file. `const db: ExportsDb = prisma` does **not** compile: Prisma's methods are generic (`SelectSubset<T, …>`) and a generic signature is not assignable to a concrete one. The adapter writes the calls out instead, which is what actually type-checks the port against the generated client — if the schema and the port drift, that file stops compiling.
+- **`Repo` is identified by `(userId, owner, name)`, not by `githubRepoId`** — a documented deviation from SPEC §3, argued at the bottom of `prisma/schema.prisma`. Nothing in the app ever holds the numeric id for free, and filling it would put a `GET /repos/{owner}/{repo}` on a path SPEC requires to cost no GitHub call. The trade: a renamed repository starts a fresh ledger.
+- **The access token is still not on the `Session`, but `githubId` and `githubLogin` now are.** Both are public information (a profile URL resolves to the id), and the export routes need an identity. Auth.js puts *no* id on `session.user` under the JWT strategy — verified in `@auth/core/lib/actions/session.js`, which builds `user` from `name`/`email`/`picture` only — so it is carried explicitly.
+- **The `signIn` callback's `User` upsert is allowed to fail silently.** A database hiccup must not cost a sign-in: anonymous mode needs no account and reading a repository needs no row. `POST /api/exports` upserts again before recording, so the row is self-healing. Nothing is logged there either — the error could carry the connection string.
 - **The two database URLs are not interchangeable.** `DATABASE_URL` is pooled and used at runtime through the Neon adapter; `DIRECT_URL` is unpooled and used by migrations, which take out advisory locks the pooler cannot hold. Pointing migrations at the pooled string looks like a hung command, not a config error.
 - **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
