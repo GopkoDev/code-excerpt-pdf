@@ -13,6 +13,15 @@ code-excerpt-pdf/
 │   ├── globals.css          # Tailwind v4 entry + @theme tokens (no tailwind.config file)
 │   ├── layout.tsx           # Root layout: fonts, ThemeProvider, <html>/<body>
 │   ├── page.tsx             # Home page (scaffold placeholder — replace with the file-picker UI)
+│   ├── (marketing)/         # PUBLIC, and STATIC: no auth() anywhere under here, so
+│   │   │                    #   `next build` prerenders these (verified: ○ in the route table)
+│   │   ├── marketing.test.ts    # pins every factual claim the legal pages make to the
+│   │   │                    #   code that makes it true — reads sources as text
+│   │   ├── terms/page.tsx   # terms of service — DRAFT, placeholders, not lawyer-reviewed
+│   │   └── privacy/
+│   │       ├── page.tsx     # privacy notice — same draft status; renders stored-data.ts
+│   │       └── stored-data.ts   # the per-model inventory the notice shows.
+│   │                        #   Record<AccountModel, …>, so a 7th model fails to compile
 │   ├── (app)/
 │   │   ├── layout.tsx       # authenticated shell: header, sign in/out, nav.
 │   │   │                    #   Reads the session but never gates — /local is anonymous
@@ -47,6 +56,9 @@ code-excerpt-pdf/
 │   ├── theme-provider.tsx   # next-themes wrapper + global "d" dark-mode hotkey
 │   ├── auth/
 │   │   └── auth-buttons.tsx # sign in / out as Server Actions (they write cookies)
+│   ├── marketing/
+│   │   └── draft-notice.tsx # THE "not lawyer-reviewed" banner both legal pages open
+│   │                        #   with — one component so they cannot disagree
 │   ├── projects/
 │   │   ├── repo-list.tsx    # client list off /api/github/repos + install CTA
 │   │   ├── repo-stats.tsx   # share of the repo's volume already filed — no API call
@@ -215,6 +227,7 @@ code-excerpt-pdf/
 ## What each area is for
 
 - **`app/`** — the Next.js 16 App Router. `app/layout.tsx` carries fonts and the theme; `app/(app)/layout.tsx` is the authenticated shell (header, sign in/out, nav) that anonymous mode also renders under. `app/page.tsx` is still the scaffold placeholder.
+- **`app/(marketing)/`** — the public surface: landing, terms, privacy. Nothing under it calls `auth()` or reads the database, which is what keeps it prerenderable and what makes it work for a visitor with no account. The legal pages are **drafts pending legal review** and say so on the page; they name no company, jurisdiction or contact address, only bracketed placeholders the operator fills in. Their _technical_ claims are a different matter: `app/(marketing)/privacy/stored-data.ts` is pinned column-for-column to `prisma/schema.prisma`, and `marketing.test.ts` also checks the two claims a reader cannot verify — that opening a repository writes a `Repo` row, and that the GitHub grant requests no scope.
 - **`app/(app)/projects/`** — GitHub mode. `page.tsx` picks a repository, `[repoId]/page.tsx` opens one. Neither talks to GitHub: they resolve the session and hand off to a client component that goes through `app/api/github/*`.
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).

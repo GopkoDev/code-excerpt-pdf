@@ -452,6 +452,21 @@ Acceptance:
       no database is reachable.** Nothing in this slice has executed a query - [ ] **[ext]** Confirm the downloaded file's `Content-Disposition` actually saves as a
       file in a browser, and that the deletion redirect lands signed out on `/`
 - [ ] **11 — Marketing.** `app/(marketing)/` landing, ToS, privacy. Parallelizable from slice 4 on
+  - [x] `app/(marketing)/terms/page.tsx` and `app/(marketing)/privacy/page.tsx`, both **drafts
+        pending legal review** and both saying so in a banner at the top
+        (`components/marketing/draft-notice.tsx`). Neither invents a company, a jurisdiction or a
+        contact address — every party-specific detail is a bracketed placeholder, and
+        `marketing.test.ts` fails if an email address or a company suffix appears
+  - [x] The privacy notice's inventory is **pinned to `prisma/schema.prisma`**, not written by
+        hand: `privacy/stored-data.ts` is a `Record<AccountModel, …>` (a seventh model stops it
+        compiling) and the test compares every field list against the columns the schema declares
+  - [x] The two claims a reader cannot check are pinned to the code that makes them true —
+        **opening a repository writes a `Repo` row** (`writeCachedTree` upserts it, and the tree
+        route calls it) and the GitHub grant **requests no scope**. If either stops holding, the
+        suite fails instead of the page quietly becoming untrue
+  - [x] Both pages are **static** — no `auth()` under `(marketing)/`, confirmed by `○ /terms`
+        and `○ /privacy` in the build's route table
+  - [ ] Landing page + footer links from the app shell
 
 > **Slices 6 and 7 were built with no database reachable.** Migration 1 has never been applied,
 > so no query in this codebase has ever executed. Everything is proven against an in-memory fake
