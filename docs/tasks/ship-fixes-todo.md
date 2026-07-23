@@ -56,9 +56,10 @@ Legend: **[blocker]** ship-gate blocker · **[risk]** acknowledged risk, isolate
 
 ## Phase 3 — Coverage on the error and concurrency paths
 
-- [ ] **Task 6** — Test `measureSelected`'s catch → error banner (readFile rejects
-      mid-measure) and `renderOnce`'s worker-failure path + `isRendering` reset.
-      Write failing-first. (te #1, #2)
+- [x] **Task 6** — Added tests for `measureSelected`'s catch → error banner
+      (readFile rejects mid-measure) and `renderOnce`'s worker-failure path +
+      `isRendering` reset. Both mutation-verified: each fails precisely when its
+      recovery path is removed. (te #1, #2)
 - [ ] **Task 7** — Test interleaved `measureSelected` calls against the stale
       `measured` closure; assert settled state is correct regardless of response
       order. (te #7)

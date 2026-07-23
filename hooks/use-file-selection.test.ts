@@ -262,6 +262,42 @@ describe("measuring a selection", () => {
     const hook = await load({ "a.ts": source(12) })
     expect(hook.result.current.totalPages).toBe(0)
   })
+
+  /**
+   * The other way measuring fails: not a file that decodes to non-text (that is
+   * marked `unsupported` above), but `readFile` itself rejecting mid-measure — a
+   * grant revoked between listing and reading, a dropped connection. That has to
+   * surface as the error banner, and measuring has to stop rather than hang.
+   */
+  it("surfaces an error banner when a file cannot be read mid-measure", async () => {
+    const src: ContentSource = {
+      listFiles: async () => [
+        { path: "a.ts", name: "a.ts", sizeBytes: 40, status: "available" },
+      ],
+      readFile: async () => {
+        throw new Error("the connection dropped")
+      },
+    }
+    const hook = renderHook(() => useFileSelection())
+    await act(async () => {
+      hook.result.current.loadSource(src)
+    })
+    await waitFor(() => expect(hook.result.current.entries).toHaveLength(1))
+
+    const node = findNode(hook.result.current.tree, "a.ts")
+    await act(async () => {
+      hook.result.current.handleToggleSelect(
+        node,
+        nodeState(node, hook.result.current.selected)
+      )
+    })
+
+    await waitFor(() =>
+      expect(hook.result.current.error).toBe("the connection dropped")
+    )
+    // The finally must clear it, or the tree reads as measuring forever.
+    expect(hook.result.current.isMeasuring).toBe(false)
+  })
 })
 
 /**
@@ -577,6 +613,39 @@ describe("rendering", () => {
 
     // A stale preview is worse than none: it looks current and is not.
     expect(hook.result.current.isPreviewOpen).toBe(false)
+  })
+
+  it("rejects and clears isRendering when the worker fails to render", async () => {
+    const hook = await load({ "a.ts": source(4) })
+    await click(hook, "a.ts")
+
+    // Measuring keeps working; only the render response comes back malformed.
+    workerSend.mockImplementation(async (request: Record<string, unknown>) => {
+      if (request.type === "measure") {
+        const files = request.files as { name: string; text: string }[]
+        return {
+          type: "measured",
+          metrics: METRICS,
+          files: files.map((file) =>
+            measured(file.name, countLines(file.text))
+          ),
+        }
+      }
+      return { type: "error" } // anything but "rendered"
+    })
+
+    let caught: unknown
+    await act(async () => {
+      try {
+        await hook.result.current.renderOnce()
+      } catch (error) {
+        caught = error
+      }
+    })
+
+    expect((caught as Error)?.message).toMatch(/Unexpected response/)
+    // The finally must reset it, or the download button spins forever.
+    expect(hook.result.current.isRendering).toBe(false)
   })
 })
 
