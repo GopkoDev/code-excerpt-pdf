@@ -211,6 +211,9 @@ code-excerpt-pdf/
 │   ├── SPEC.md              # HOW to build it: objective, structure, style, tests, boundaries
 │   ├── ideas/
 │   │   └── code-excerpt-pdf.md  # refined idea one-pager: WHY each design decision was made
+│   ├── notes/               # dated work logs: what was fixed and the reasoning
+│   │                        #   behind it. Ukrainian — written to be read, not
+│   │                        #   to govern. Never a source of truth.
 │   └── tasks/
 │       ├── plan.md          # build plan: findings, vertical slices, checkpoints
 │       └── todo.md          # actionable checklist, acceptance criteria per slice
