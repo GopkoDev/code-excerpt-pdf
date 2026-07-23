@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 
 import { githubFetch, statusForError } from "@/lib/github/client"
 import { GitHubError } from "@/lib/github/errors"
+import { isValidOwner, isValidRepoName } from "@/lib/github/repo-id"
 import { readAccessToken } from "@/lib/github/session-token"
 import { parseTreeResponse } from "@/lib/github/tree"
 
@@ -18,7 +19,10 @@ export async function GET(request: Request) {
   const repo = url.searchParams.get("repo")
   const ref = url.searchParams.get("ref") ?? "HEAD"
 
-  if (!owner || !repo) {
+  // Both halves land in a GitHub API path. Anything holding a slash or a `..`
+  // could address an endpoint other than this repository, so the shape is
+  // checked here rather than trusted because it came from our own link.
+  if (!owner || !repo || !isValidOwner(owner) || !isValidRepoName(repo)) {
     return NextResponse.json(
       { error: "owner-and-repo-required" },
       { status: 400 }

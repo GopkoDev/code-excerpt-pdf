@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { decodeBlobResponse } from "@/lib/github/blob"
 import { githubFetch, statusForError } from "@/lib/github/client"
 import { GitHubError } from "@/lib/github/errors"
+import { isValidOwner, isValidRepoName } from "@/lib/github/repo-id"
 import { readAccessToken } from "@/lib/github/session-token"
 
 /**
@@ -18,7 +19,17 @@ export async function GET(request: Request) {
   const repo = url.searchParams.get("repo")
   const sha = url.searchParams.get("sha")
 
-  if (!owner || !repo || !sha) {
+  // Checked, not trusted: all three are interpolated into a GitHub API path,
+  // and a value carrying a slash or a `..` could reach a different endpoint.
+  // A blob sha is hex — 40 characters today, 64 in a sha256 repository.
+  if (
+    !owner ||
+    !repo ||
+    !sha ||
+    !isValidOwner(owner) ||
+    !isValidRepoName(repo) ||
+    !/^[0-9a-f]{40,64}$/.test(sha)
+  ) {
     return NextResponse.json(
       { error: "owner-repo-and-sha-required" },
       { status: 400 }
