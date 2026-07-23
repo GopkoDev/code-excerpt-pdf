@@ -372,10 +372,14 @@ Acceptance:
 
 ### What is still owed on slice 6
 
-- [ ] **[ext]** Run migration 1 against a real Neon database (`npx prisma migrate dev --name
-      init`), then re-run the whole flow. Until then the SQL Prisma generates from this schema
-      has never executed, no query has ever hit Postgres, and the compound key
-      `userId_owner_name` is proven only by the generated types
+- [x] Migration 1 exists on disk as `prisma/migrations/20260723120000_init/`, written **offline**
+      with `npx prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script`.
+      `migrate diff` is read-only and opens no connection, so the four-model migration Checkpoint
+      D reviews is now a reviewable artifact rather than something `migrate dev` would have to
+      invent later — which is what keeps migrations 2 and 3 separable at all
+- [ ] **[ext]** APPLY migration 1 against a real Neon database (`npx prisma migrate deploy`),
+      then re-run the whole flow. The SQL exists but has never executed, no query has ever hit
+      Postgres, and the compound key `userId_owner_name` is proven only by the generated types
 - [ ] Exercise sign-in → export → reopen the repo on a real database and confirm the row shows
       as `used`
 

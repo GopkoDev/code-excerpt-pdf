@@ -129,6 +129,15 @@ code-excerpt-pdf/
 │       ├── render.ts        # drawFiles() = the ONLY draw loop; renderPdf() → blob+count
 │       ├── render.test.ts   # single-run page count, alphabetical order, raw-byte hashing
 │       └── worker-protocol.ts   # message types shared by the page and the worker
+├── prisma/
+│   ├── schema.prisma        # THE complete inventory of what is persisted, with the
+│   │                        #   NDA constraint restated on every model
+│   ├── migrations/          # hand-placed, generated OFFLINE by `prisma migrate diff
+│   │                        #   --script`. NONE has been applied to a database yet
+│   │   ├── migration_lock.toml
+│   │   └── 20260723120000_init/   # User, Repo, Export, UsedFile — four models, on purpose
+│   └── migrations.test.ts   # reads the checked-in SQL: one concern per migration,
+│                            #   and no column that could hold code or a credential
 ├── scripts/
 │   └── copy-pdfkit.mjs      # postinstall: node_modules/pdfkit/js/pdfkit.standalone.js
 │                            #   → public/vendor/ (loaded by a Web Worker at runtime)
@@ -215,7 +224,8 @@ code-excerpt-pdf/
 - **The access token is still not on the `Session`, but `githubId` and `githubLogin` now are.** Both are public information (a profile URL resolves to the id), and the export routes need an identity. Auth.js puts *no* id on `session.user` under the JWT strategy — verified in `@auth/core/lib/actions/session.js`, which builds `user` from `name`/`email`/`picture` only — so it is carried explicitly.
 - **The `signIn` callback's `User` upsert is allowed to fail silently.** A database hiccup must not cost a sign-in: anonymous mode needs no account and reading a repository needs no row. `POST /api/exports` upserts again before recording, so the row is self-healing. Nothing is logged there either — the error could carry the connection string.
 - **The two database URLs are not interchangeable.** `DATABASE_URL` is pooled and used at runtime through the Neon adapter; `DIRECT_URL` is unpooled and used by migrations, which take out advisory locks the pooler cannot hold. Pointing migrations at the pooled string looks like a hung command, not a config error.
-- **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one.
+- **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one. `prisma/migrations.test.ts` enforces it, so collapsing them back together fails the suite rather than merely contradicting a comment.
+- **The migration SQL was produced offline and no migration has ever run.** The user declined to have a database touched, so `prisma migrate dev` was never invoked. Each folder was written with `npx prisma migrate diff --from-schema <previous state> --to-schema prisma/schema.prisma --script`, chaining snapshots of the schema rather than diffing against a live database — which is the only way to get *separate* migrations with nothing to apply them to. `migrate diff` is read-only and needs no connection. What that leaves unproven: the SQL has never executed, so nothing here is evidence that it applies cleanly.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.
 - **The two modes must not have two implementations.** SPEC requires GitHub mode to behave exactly like anonymous mode, so all of the state lives in `hooks/use-file-selection.ts` and all of the UI in `components/selection/selection-panel.tsx`. A page adds only what is genuinely source-specific — the drop zone, or the truncated-tree warning. Copying either into a page is how the two page counts start to disagree.
 - **Preview and download share one render**, keyed by `selectionSignature()`. Rendering separately would produce two page counts free to disagree — the drift the single-run rule exists to prevent. A browser check asserts the download saves the identical `Blob` *object* the preview displayed.
