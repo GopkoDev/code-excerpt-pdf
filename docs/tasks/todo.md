@@ -9,17 +9,20 @@ Legend: **[!]** blocks later work · **[ext]** human/external action with lead t
 
 ## Setup — minimum shared groundwork
 
-- [ ] `npm i pdfkit` + `npm i -D @types/pdfkit`
-- [ ] Add `postinstall` that copies `node_modules/pdfkit/js/pdfkit.standalone.js` →
-      `public/vendor/` (keeps the version pinned)
-- [ ] `npm i -D vitest vite-tsconfig-paths`; add `vitest.config.ts` (env `node`, no jsdom) and
-      `test` / `test:watch` scripts - [ ] **Verify `@/*` resolves in a test** — Vitest ignores `tsconfig.json` `paths` and fails
-      silently without `vite-tsconfig-paths`
-- [ ] `app/globals.css` — add `--font-mono: var(--font-mono);` to `@theme inline` (currently
+- [x] `npm i pdfkit` (0.19.1) + `npm i -D @types/pdfkit`
+- [x] Add `postinstall` that copies `node_modules/pdfkit/js/pdfkit.standalone.js` →
+      `public/vendor/` (keeps the version pinned) — `scripts/copy-pdfkit.mjs`; the copy is
+      gitignored and excluded from ESLint + Prettier
+- [x] `npm i -D vitest` (4.1.10); add `vitest.config.ts` (env `node`, no jsdom) and
+      `test` / `test:watch` scripts - [x] **Verify `@/*` resolves in a test** — `lib/utils.test.ts` is the standing guard. **Deviation:
+      `vite-tsconfig-paths` is NOT used** — Vite 8 resolves tsconfig paths natively and the plugin
+      now prints a deprecation notice, so the config sets `resolve.tsconfigPaths: true` instead.
+      Confirmed RED (`Cannot find package '@/lib/utils'`) before the option was added
+- [x] `app/globals.css` — add `--font-mono: var(--font-mono);` to `@theme inline` (currently
       missing, so `font-mono` does not resolve to Geist Mono)
-- [ ] `.gitignore` — add `!.env.example` (the `.env*` line would swallow it)
-- [ ] `package.json` — change `format` to `prettier --write .`
-- [ ] Clean up `app/layout.tsx`: remove the unused `Geist` import and the stray semicolon on the
+- [x] `.gitignore` — add `!.env.example` (the `.env*` line would swallow it)
+- [x] `package.json` — change `format` to `prettier --write .`
+- [x] Clean up `app/layout.tsx`: remove the unused `Geist` import and the stray semicolon on the
       `cn` import
 
 ---
@@ -29,7 +32,9 @@ Legend: **[!]** blocks later work · **[ext]** human/external action with lead t
 Throwaway UI; timebox 1 day. Highest-value spike — everything downstream assumes it passes.
 
 - [ ] Rename `generate.js` → `generate.cjs` (it currently throws `ReferenceError: require is not
-defined` under `"type": "module"`) and update `.claude/ARCHITECTURE.md` in the same commit
+defined` under `"type": "module"`) and update `.claude/ARCHITECTURE.md` in the same commit - [ ] The rename alone does **not** make `npm run lint` green: `@typescript-eslint/no-require-imports`
+      fires on `.cjs` too (3 errors today, the only thing keeping lint red). Add a `files: ["**/*.cjs"]`
+      override in `eslint.config.mjs` disabling that rule
 - [ ] Run `node generate.cjs <fixture-dir>` and keep the output as the geometry reference
 - [ ] Choose + subset a Unicode monospace font (regular + bold, Cyrillic coverage)
 - [ ] Throwaway page + Web Worker loading `pdfkit.standalone.js` from `/public/vendor/`

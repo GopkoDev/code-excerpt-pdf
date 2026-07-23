@@ -30,6 +30,10 @@ pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+
+# vendored at postinstall from node_modules/pdfkit (scripts/copy-pdfkit.mjs)
+/public/vendor/
 
 # typescript
 *.tsbuildinfo
