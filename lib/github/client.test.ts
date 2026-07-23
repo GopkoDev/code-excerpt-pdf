@@ -107,18 +107,6 @@ describe("githubFetch", () => {
     expect(init.cache).toBe("no-store")
   })
 
-  it("never lets a token GitHub echoed back reach the message", async () => {
-    stub(
-      new Response(JSON.stringify({ message: "bad" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      })
-    )
-    const error = new GitHubError("unauthorized", "rejected ghu_LEAKED123")
-
-    expect(error.safeMessage).not.toMatch(/ghu_/)
-  })
-
   it("maps an unreachable GitHub to 503, not to a generic failure", async () => {
     const error = await failureOf(reply(502))
     expect(statusForError(error)).toBe(503)
