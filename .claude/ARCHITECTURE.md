@@ -33,7 +33,8 @@ code-excerpt-pdf/
 │   ├── auth/
 │   │   └── auth-buttons.tsx # sign in / out as Server Actions (they write cookies)
 │   ├── projects/
-│   │   └── repo-list.tsx    # client list off /api/github/repos + install CTA
+│   │   ├── repo-list.tsx    # client list off /api/github/repos + install CTA
+│   │   └── repo-workspace.tsx   # loads the cached GitHub source into SelectionPanel
 │   ├── local/
 │   │   └── file-drop.tsx    # drop zone + file picker + webkitdirectory folder picker
 │   ├── selection/
@@ -68,8 +69,10 @@ code-excerpt-pdf/
 │   │   ├── refresh-lock.ts  # in-flight map — stops parallel refreshes racing
 │   │   ├── installation.ts  # /user/installations → has the App been installed?
 │   │   ├── repos.ts         # Zod-validated installations + repositories responses
-│   │   └── repo-id.ts       # `owner_repo` URL segment ⇄ parts, and the shape guards
-│   │                        #   the route handlers use before touching an API path
+│   │   ├── repo-id.ts       # `owner_repo` URL segment ⇄ parts, and the shape guards
+│   │   │                    #   the route handlers use before touching an API path
+│   │   └── refreshing-fetch.ts  # client side of the 401 contract: refresh once,
+│   │                        #   retry once, single-flight. THE app's browser fetcher
 │   ├── files/
 │   │   └── decode.ts        # bytes → text, or an honest reason (binary / bad UTF-8 / BOM)
 │   ├── db/
@@ -80,7 +83,8 @@ code-excerpt-pdf/
 │   │   └── status.ts        # used vs used-but-changed resolution
 │   ├── sources/
 │   │   ├── local.ts         # ContentSource over dropped files; LAZY reads
-│   │   └── github.ts        # ContentSource over a repo; ONE Trees call, cached
+│   │   ├── github.ts        # ContentSource over a repo; ONE Trees call, cached
+│   │   └── github-cache.ts  # module-scoped instances, so a remount reuses that call
 │   ├── vendored/
 │   │   ├── types.ts         # Layer, Verdict, ManualOverride
 │   │   ├── glob.ts          # small gitignore-subset matcher (no dependency)
@@ -141,7 +145,8 @@ code-excerpt-pdf/
 
 ## What each area is for
 
-- **`app/`** — the Next.js 16 App Router. `layout.tsx` is the only shell; `page.tsx` is still the scaffold placeholder and is where the real UX (repo file tree with per-file page estimates + running total + export) will be built.
+- **`app/`** — the Next.js 16 App Router. `app/layout.tsx` carries fonts and the theme; `app/(app)/layout.tsx` is the authenticated shell (header, sign in/out, nav) that anonymous mode also renders under. `app/page.tsx` is still the scaffold placeholder.
+- **`app/(app)/projects/`** — GitHub mode. `page.tsx` picks a repository, `[repoId]/page.tsx` opens one. Neither talks to GitHub: they resolve the session and hand off to a client component that goes through `app/api/github/*`.
 - **`components/ui/`** — shadcn components. Add via `npx shadcn@latest add <component>`; do not hand-write. Base is `@base-ui/react`, so custom triggers use the `render` prop, not `asChild`.
 - **`components/theme-provider.tsx`** — wraps the app in next-themes and registers the global `d` hotkey (dark/light toggle, ignored while typing).
 - **`lib/utils.ts`** — `cn()`; the only shared util so far.
@@ -170,7 +175,9 @@ code-excerpt-pdf/
 - **`auth()` fails with `UntrustedHost` on any host Auth.js cannot infer** — a production build on a port other than 3000, a container, a proxy. It does not throw the page away, it just renders everything as signed out, which reads as a login bug. `AUTH_TRUST_HOST=true` fixes it; Vercel is detected automatically. Noted in `.env.example`.
 - **The `[repoId]` segment is `owner_repo`, split at the FIRST underscore.** A GitHub login may only hold alphanumerics and hyphens, so that split is unambiguous even though repository names may contain underscores. A slash cannot be used: Next reads it as two segments and `%2F` gets normalised away in transit. `parseRepoId` returns `null` for anything malformed, and the route handlers refuse the same shapes — both halves end up inside a GitHub API path, where a `/` or a `..` would address a different endpoint.
 - **The access token must never reach the `Session` object.** `/api/auth/session` is readable by the browser, so anything on the session is public to the page. Route handlers read the raw JWT with `getToken()` instead. SPEC's "no token in any log or RSC payload" depends on this.
-- **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
+- **A `ContentSource` for a repository lives in module scope, not in React state.** SPEC: navigating away from a repo and back in the same session issues zero further GitHub calls — but navigating remounts the page, and a source built in the component would repeat the Trees call. `lib/sources/github-cache.ts` holds the instances; the source *is* the cache, so no query library wraps it. **No React Query was added**: nothing left for it to cache, and it would have been a second place for the same truth to live.
+- **The repository page fetches `.gitattributes` and `components.json` on open** (one blob call each, only if the tree lists them). Vendored detection needs them, and they are the same two files anonymous mode reads. It is a deliberate two-request cost per repo, not a leak in the "content only for selected files" rule.
+- **Token refresh happens in exactly one route handler**, behind `createInFlightLock`. The client half is `lib/github/refreshing-fetch.ts`: it recognises `401 token-expired`, posts to that one route, and retries once — with a single-flight promise, because selecting a folder fires several blob reads at once and GitHub's refresh tokens are single-use. The `jwt` callback does no network I/O: Next forbids setting cookies during render, so a token rotated there is discarded while GitHub has already invalidated the old one — the random-logout bug.
 - **The two database URLs are not interchangeable.** `DATABASE_URL` is pooled and used at runtime through the Neon adapter; `DIRECT_URL` is unpooled and used by migrations, which take out advisory locks the pooler cannot hold. Pointing migrations at the pooled string looks like a hung command, not a config error.
 - **Migration 1 carries four models on purpose** — `Classification` and `TreeCache` are held back. Checkpoint D reviews the migration with `pg_dump` for anything code- or credential-shaped, and that review is meaningful on a four-model diff and worthless on a six-model one.
 - **Pages do not add up.** Every file measured alone rounds up to a whole page, but the export is one continuous flow, so the next file starts on the page the previous one ended. Summing per-file counts over-states the total by up to a page per file. Any aggregate — folder rows, the running total — must go through `paginate()` over the whole set, never `reduce((a, b) => a + b)`. `measure.test.ts` § "pagination is a flow, not a sum" guards this.

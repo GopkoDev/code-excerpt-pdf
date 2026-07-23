@@ -230,6 +230,11 @@ Acceptance — verified in real headless Chrome:
 > the `Session` (that would have broken "no token in any RSC payload" — `/api/auth/session` is
 > readable by the browser), and `unstable_update` updates the Session rather than the JWT, so
 > refreshed tokens feed back through the `jwt` callback's `update` trigger.
+>
+> **UI now built too.** `app/(app)/layout.tsx` (header, sign in/out as Server Actions),
+> `app/(app)/projects/page.tsx` and `app/api/github/repos/route.ts` exist and were exercised in
+> headless Chrome — signed out, and signed in against a synthetic session cookie with the
+> GitHub API intercepted. What still needs real credentials is the OAuth round trip itself.
 
 
 Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a real deploy.
@@ -245,14 +250,23 @@ Riskiest infra slice; keep it alone. Budget a 1-day spike inside it, against a r
       so parallel blob fetches cannot trigger parallel refreshes
 - [ ] `jwt` callback does **no network I/O** — it only sets `token.error = "expired"`
 - [ ] Track `refresh_token_expires_in` (6 months) → clean re-auth, not a 500
-- [ ] `lib/github/installation.ts` (`GET /user/installations` → `total_count === 0`)
-- [ ] `app/(app)/layout.tsx`, `app/(app)/projects/page.tsx`, `.env.example`
+- [x] `lib/github/installation.ts` (`GET /user/installations` → `total_count === 0`) — now goes
+      through `githubFetch`, so `client.ts` really is the only caller of api.github.com, and a
+      revoked grant surfaces as the same mapped `GitHubError` as everything else
+- [x] `app/(app)/layout.tsx`, `app/(app)/projects/page.tsx`, `.env.example`. Also
+      `app/api/github/repos/route.ts` (installations → repositories), `lib/github/repos.ts`
+      (Zod), `lib/github/repo-id.ts` (`owner_repo` segment) and `components/auth`,
+      `components/projects/repo-list.tsx`
+- [x] **`AUTH_TRUST_HOST` documented in `.env.example`** — found while verifying: on any host
+      Auth.js cannot infer, `auth()` throws `UntrustedHost` and every page silently renders as
+      signed out, which reads as a broken login rather than a config gap
 
 Acceptance:
 
 - [ ] Sign-in reaches only the repos selected at install
 - [ ] Authenticated-but-no-installation routes to the install URL, and the return lands on a
-      **working** page (not a CSRF error)
+      **working** page (not a CSRF error) — the install CTA is built and renders from
+      `totalCount === 0`; the round trip itself still needs a real App
 - [ ] Session survives refresh; expired token refreshes transparently under **5 concurrent**
       requests
 - [ ] `grep -rn "repo" auth.ts` finds no scope
@@ -268,26 +282,36 @@ Acceptance:
 
 ## Slice 5 — GitHub repos end to end (still no persistence)
 
-> **Library and routes written and unit-tested against a mocked fetch; the UI page is not.**
-> `lib/github/{client,errors,tree,blob,concurrency,session-token}.ts`,
-> `app/api/github/{tree,blob}/route.ts` and `lib/sources/github.ts` are done. What remains is
-> `app/(app)/projects/[repoId]/page.tsx` and the React Query provider — both need a real repo to
-> be worth building.
+> **Complete, but verified against an intercepted GitHub rather than the real one.** The whole
+> path — page, tree, selection, running total, preview, download — was driven in headless Chrome
+> with a synthetic session cookie and `/api/github/*` fulfilled from fixtures over CDP. That
+> proves the page and the call pattern; it does not prove the OAuth round trip or GitHub's real
+> response shapes beyond what the Zod schemas assert.
 
 
-- [ ] `lib/github/{client,tree,blob,errors,concurrency}.ts`
-- [ ] `app/api/github/{tree,blob}/route.ts` — **all GitHub access lives here, never in RSC**
-- [ ] Zod schemas for the Trees response (first untrusted JSON)
-- [ ] React Query provider; `lib/sources/github.ts` implementing `ContentSource`
-- [ ] `app/(app)/projects/[repoId]/page.tsx`
+- [x] `lib/github/{client,tree,blob,errors,concurrency}.ts`
+- [x] `app/api/github/{tree,blob}/route.ts` — **all GitHub access lives here, never in RSC**
+- [x] Zod schemas for the Trees response (first untrusted JSON), and for the repositories one
+- [x] `lib/sources/github.ts` implementing `ContentSource`, plus `lib/sources/github-cache.ts`.
+      **Deviation: no React Query.** The source already caches the tree and every blob; the only
+      gap was that a remount built a *new* source, which a module-scoped map fixes in ten lines.
+      A query library would have been a second cache holding the same truth
+- [x] `lib/github/refreshing-fetch.ts` — the client half of the `401 token-expired` contract:
+      refresh through the one route allowed to, retry once, single-flight so parallel blob reads
+      cannot spend several single-use refresh tokens
+- [x] `app/(app)/projects/[repoId]/page.tsx` + `components/projects/repo-workspace.tsx`
 
 Acceptance:
 
-- [ ] Opening a repo issues exactly **one** `recursive=1` Trees call
-- [ ] Navigating away and back in-session issues **zero** further GitHub calls
-- [ ] Content fetched only for selected files; concurrency capped 3–5
-- [ ] Truncated tree (large monorepo) surfaced honestly, not silently dropped
-- [ ] Export uses the identical pipeline to anonymous mode
+- [x] Opening a repo issues exactly **one** `recursive=1` Trees call — one, in a captured trace
+- [x] Navigating away and back in-session issues **zero** further GitHub calls — verified by
+      leaving for `/projects` and returning: still one tree call, list still rendered
+- [x] Content fetched only for selected files — selecting `src` fetched exactly its two blobs.
+      Plus `.gitattributes` on open, which vendored detection needs (same as anonymous mode)
+- [x] Truncated tree (large monorepo) surfaced honestly, not silently dropped — a banner on the
+      page, driven by `isTruncated()`. **Not exercised with a truncated fixture**
+- [x] Export uses the identical pipeline to anonymous mode — literally the same hook and the
+      same panel. Running total 3, preview 3, `/Type /Page` objects 3
 
 ## ▸ CHECKPOINT C — API budget review
 
